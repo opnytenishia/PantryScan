@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Healthkit Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #2a6fdb;
+    --bg:     #f4f5f7;
+    --ink:    #0f1722;
+    --ink-2:  #4b5566;
+    --muted:  #8a93a3;
+    --hair:   #e7e9ee;
+    --card:   #ffffff;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Manrope', sans-serif;
+    background: #e8ecf2;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    width: 600px; height: 600px;
+    top: -200px; left: -200px;
+    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 10%, white), transparent 70%);
+  }
+  body::after {
+    width: 500px; height: 500px;
+    bottom: -150px; right: -150px;
+    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 8%, white), transparent 70%);
+  }
+
+  .phone {
+    width: 390px;
+    min-height: 820px;
+    background: var(--bg);
+    border-radius: 24px;
+    box-shadow: 0 24px 80px rgba(15,23,34,0.18), 0 4px 16px rgba(15,23,34,0.08);
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .scroll-area {
+    height: 820px;
+    overflow-y: auto;
+    padding: 10px 20px 28px;
+    scrollbar-width: none;
+  }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  /* LABEL */
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border-radius: 20px;
+    border: 1px solid var(--hair);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+
+  /* HEADER ROW */
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .back-btn {
+    width: 36px; height: 36px;
+    background: var(--card);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .back-btn svg { color: var(--ink-2); }
+  .header-date {
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* APP TITLE */
+  .app-title {
+    font-size: 32px; font-weight: 800;
+    letter-spacing: -0.8px;
+    color: var(--ink);
+    margin-bottom: 16px;
+  }
+
+  /* BIG STAT */
+  .big-stat {
+    font-size: 28px; font-weight: 800;
+    letter-spacing: -0.6px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .big-stat-32 {
+    font-size: 32px;
+    letter-spacing: -0.8px;
+  }
+
+  /* PROGRESS BAR */
+  .progress-bar-wrap {
+    width: 100%;
+    height: 8px;
+    background: var(--hair);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.6s ease;
+  }
+  .progress-bar-fill.goal-met {
+    background: linear-gradient(90deg, var(--accent), color-mix(in oklab, var(--accent) 30%, white));
+  }
+  .progress-bar-fill.goal-unmet {
+    background: var(--accent);
+  }
+
+  /* DIVIDER */
+  .divider {
+    width: calc(100% + 36px);
+    margin-left: -18px;
+    height: 1px;
+    background: var(--hair);
+    margin-top: 14px;
+    margin-bottom: 14px;
+  }
+
+  /* STEPS CARD */
+  .avg-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .avg-tag {
+    background: color-mix(in oklab, var(--accent) 12%, white);
+    color: var(--accent);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 6px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* WEEKLY CHART */
+  .chart-wrap {
+    position: relative;
+    height: 130px;
+    margin-bottom: 4px;
+  }
+  .chart-yaxis {
+    position: absolute;
+    left: 0; top: 0; bottom: 20px;
+    width: 38px;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-right: 6px;
+  }
+  .chart-yaxis span {
+    font-size: 9px; font-weight: 600;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-bars-area {
+    position: absolute;
+    left: 38px; right: 0; top: 0; bottom: 20px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .chart-tick-lines {
+    position: absolute;
+    left: 38px; right: 0; top: 0; bottom: 20px;
+    pointer-events: none;
+  }
+  .tick-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: var(--hair);
+    border-top: 1px dashed var(--hair);
+  }
+  .goal-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    border-top: 1.5px dashed var(--accent);
+  }
+  .goal-line-label {
+    position: absolute;
+    right: 0;
+    font-size: 9px; font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    transform: translateY(-100%);
+    padding-bottom: 2px;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .bar {
+    width: 100%;
+    max-width: 26px;
+    border-radius: 8px;
+    transform-origin: bottom;
+    transform: scaleY(0);
+    transition: transform 0.7s ease-out;
+  }
+  .bar.above-goal {
+    background: var(--accent);
+  }
+  .bar.below-goal {
+    background: color-mix(in oklab, var(--accent) 18%, white);
+    border: 1px solid color-mix(in oklab, var(--accent) 30%, white);
+  }
+  .chart-xlabels {
+    position: absolute;
+    left: 38px; right: 0;
+    bottom: 0;
+    display: flex;
+    gap: 4px;
+  }
+  .chart-xlabel {
+    flex: 1;
+    text-align: center;
+    font-size: 9px; font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.3px;
+  }
+
+  /* PROGRESS ROW */
+  .progress-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .progress-row-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .progress-row-goal {
+    font-size: 11px; font-weight: 600;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* SET GOAL BUTTON */
+  .set-goal-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1.5px solid var(--accent);
+    color: var(--accent);
+    background: transparent;
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px; font-weight: 700;
+    border-radius: 12px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-top: 14px;
+    float: right;
+  }
+  .set-goal-btn:hover {
+    background: color-mix(in oklab, var(--accent) 8%, white);
+  }
+
+  /* HEART RATE ROW */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .two-col .card { margin-bottom: 0; }
+  .heart-card-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .heart-glyph {
+    width: 54px; height: 54px;
+    flex-shrink: 0;
+  }
+  .heart-meta {
+    font-size: 11px; font-weight: 500;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .heart-bpm {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    margin-top: 2px;
+  }
+  .bpm-unit {
+    font-size: 14px; font-weight: 600;
+    color: var(--ink-2);
+  }
+  .resting-sub {
+    font-size: 10px; font-weight: 500;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* SLEEP CARD */
+  .sleep-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .sleep-range {
+    font-size: 11px; font-weight: 600;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage-bar {
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    margin-bottom: 12px;
+  }
+  .stage-segment { height: 100%; }
+  .stage-legend {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .legend-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .legend-swatch-row {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .legend-swatch {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .legend-label {
+    font-size: 10px; font-weight: 600;
+    color: var(--muted);
+  }
+  .legend-val {
+    font-size: 11px; font-weight: 700;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ENERGY CARD */
+  .stack-bar-wrap {
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    margin: 8px 0 12px;
+  }
+  .energy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .energy-stat-label {
+    font-size: 11px; font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .energy-val {
+    font-size: 18px; font-weight: 800;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.4px;
+  }
+  .energy-val span {
+    font-size: 12px; font-weight: 600;
+    color: var(--ink-2);
+  }
+  .mini-progress {
+    width: 100%;
+    height: 4px;
+    background: var(--hair);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .mini-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.6s;
+  }
+
+  /* WATER CARD */
+  .cups-row {
+    display: flex;
+    gap: 5px;
+    margin: 10px 0 10px;
+  }
+  .cup-btn {
+    flex: 1;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px solid var(--hair);
+    background: var(--bg);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cup-btn.filled {
+    border-color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 10%, white);
+  }
+  .cup-fill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: color-mix(in oklab, var(--accent) 55%, white);
+    transition: height 0.3s ease;
+  }
+  .cup-icon {
+    position: relative;
+    z-index: 1;
+  }
+  .water-header { display: flex; align-items: baseline; justify-content: space-between; }
+  .water-ml {
+    font-size: 11px; font-weight: 600;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* WORKOUTS CARD */
+  .workout-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .workout-count {
+    font-size: 10px; font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .workout-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--hair);
+  }
+  .workout-glyph {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--accent) 12%, white);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+  .workout-info { flex: 1; }
+  .workout-type {
+    font-size: 13px; font-weight: 700;
+    color: var(--ink);
+  }
+  .workout-time {
+    font-size: 11px; font-weight: 500;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+  .workout-right { text-align: right; }
+  .workout-dur {
+    font-size: 13px; font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .workout-kcal {
+    font-size: 11px; font-weight: 500;
+    color: var(--muted);
+    margin-top: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* MODAL SCRIM */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(15,23,34,0.32);
+    backdrop-filter: blur(2px);
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s;
+    border-radius: 24px;
+  }
+  .scrim.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* BOTTOM SHEET */
+  .bottom-sheet {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--card);
+    border-radius: 24px 24px 0 0;
+    padding: 12px 20px 28px;
+    z-index: 11;
+    transform: translateY(110%);
+    transition: transform 0.32s cubic-bezier(.2,.8,.2,1);
+  }
+  .bottom-sheet.open {
+    transform: translateY(0);
+  }
+  .grabber {
+    width: 40px; height: 4px;
+    background: var(--hair);
+    border-radius: 999px;
+    margin: 0 auto 16px;
+  }
+  .sheet-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .sheet-title-left {
+    display: flex; flex-direction: column;
+  }
+  .sheet-target {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .sheet-subtitle {
+    font-size: 13px; font-weight: 600;
+    color: var(--ink-2);
+    margin-top: 1px;
+  }
+  .close-btn {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--hair);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-2);
+  }
+  .draft-display {
+    font-size: 56px; font-weight: 800;
+    letter-spacing: -1.5px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    margin: 12px 0;
+    line-height: 1;
+  }
+  .draft-unit {
+    font-size: 18px; font-weight: 600;
+    color: var(--muted);
+  }
+
+  /* SLIDER */
+  .slider-wrap { margin: 8px 0 4px; }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: white;
+    border: 2.5px solid var(--accent);
+    box-shadow: 0 2px 8px rgba(15,23,34,0.15);
+    cursor: pointer;
+  }
+  .slider-minmax {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px; font-weight: 600;
+    color: var(--muted);
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* CHIPS */
+  .chips-row {
+    display: flex;
+    gap: 8px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+  .chip {
+    padding: 7px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--hair);
+    background: var(--bg);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip.active {
+    border-color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 10%, white);
+    color: var(--accent);
+  }
+
+  /* PRIMARY BUTTON */
+  .primary-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 16px color-mix(in oklab, var(--accent) 40%, transparent);
+    transition: opacity 0.15s;
+    margin-top: 4px;
+  }
+  .primary-btn:active { opacity: 0.85; }
+
+  /* LOADING */
+  .loading-screen {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    border-radius: 24px;
+    gap: 12px;
+    transition: opacity 0.4s;
+  }
+  .loading-screen.hidden { opacity: 0; pointer-events: none; }
+  .loading-title {
+    font-size: 22px; font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+  }
+  .loading-sub {
+    font-size: 13px; font-weight: 500;
+    color: var(--muted);
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--hair);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .clearfix::after { content: ''; display: block; clear: both; }
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <!-- Loading Screen -->
+  <div class="loading-screen" id="loadingScreen">
+    <div class="spinner"></div>
+    <div class="loading-title">Healthkit</div>
+    <div class="loading-sub">Loading your health data…</div>
+  </div>
+
+  <!-- Main scroll area -->
+  <div class="scroll-area" id="mainContent">
+
+    <!-- Header -->
+    <div class="header-row" style="margin-bottom:8px;">
+      <div class="back-btn" id="backBtn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 12L6 8l4-4"/>
+        </svg>
+      </div>
+      <span class="header-date" id="headerDate">–</span>
+    </div>
+
+    <!-- App title -->
+    <div class="app-title">Healthkit</div>
+
+    <!-- STEPS CARD -->
+    <div class="card" id="stepsCard">
+      <div class="label" style="margin-bottom:6px;">Steps</div>
+      <div class="avg-row">
+        <span class="label" style="font-size:10px;">Average</span>
+        <span class="big-stat big-stat-32" id="avgSteps">–</span>
+        <span class="avg-tag">Last 7 Days</span>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-wrap" id="chartWrap">
+        <div class="chart-yaxis">
+          <span>20k</span>
+          <span>10k</span>
+          <span>5k</span>
+          <span></span>
+        </div>
+        <div class="chart-tick-lines" id="chartTickLines"></div>
+        <div class="chart-bars-area" id="chartBars"></div>
+        <div class="chart-xlabels" id="chartXLabels"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Steps today -->
+      <div class="progress-row" style="margin-bottom:12px;">
+        <div class="progress-row-header">
+          <span class="label">Steps Today</span>
+          <span class="progress-row-goal" id="todayGoalLabel">– goal</span>
+        </div>
+        <span class="big-stat" id="todaySteps">–</span>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="todayBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Steps yesterday -->
+      <div class="progress-row">
+        <div class="progress-row-header">
+          <span class="label">Steps Yesterday</span>
+          <span class="progress-row-goal" id="yestGoalLabel">– goal</span>
+        </div>
+        <span class="big-stat" id="yestSteps">–</span>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="yestBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="clearfix">
+        <button class="set-goal-btn" id="setGoalBtn">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none"/></svg>
+          Set goal
+        </button>
+      </div>
+    </div>
+
+    <!-- HEART RATE ROW -->
+    <div class="two-col">
+      <div class="card">
+        <span class="label">Heart Rate</span>
+        <div class="heart-card-inner" style="margin-top:6px;">
+          <div>
+            <div class="heart-bpm">
+              <span class="big-stat" id="heartBpm">–</span>
+              <span class="bpm-unit">bpm</span>
+            </div>
+            <div class="heart-meta">Just now</div>
+          </div>
+          <svg class="heart-glyph" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path id="heartPath" d="M32 54S8 38 8 22a14 14 0 0 1 24-9.8A14 14 0 0 1 56 22C56 38 32 54 32 54Z" fill="color-mix(in oklab, var(--accent) 18%, white)" stroke="var(--accent)" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card">
+        <span class="label">Resting HR</span>
+        <div style="margin-top:6px;">
+          <div class="heart-bpm">
+            <span class="big-stat" id="restingBpm">–</span>
+            <span class="bpm-unit">bpm</span>
+          </div>
+          <div class="resting-sub" id="restingSub">7-day avg · –</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLEEP CARD -->
+    <div class="card">
+      <div class="sleep-header">
+        <div>
+          <span class="label">Sleep · Last Night</span>
+          <div class="big-stat" style="margin-top:4px;" id="sleepTotal">–</div>
+        </div>
+        <div class="sleep-range" id="sleepRange">– – –</div>
+      </div>
+      <div class="stage-bar" id="stageBar"></div>
+      <div class="stage-legend" id="stageLegend"></div>
+    </div>
+
+    <!-- ENERGY CARD -->
+    <div class="card">
+      <span class="label">Energy Burned</span>
+      <div class="big-stat" style="margin-top:6px;" id="totalKcal">–<span style="font-size:14px;font-weight:600;color:var(--ink-2);margin-left:3px;">kcal</span></div>
+      <div class="stack-bar-wrap" id="stackBar"></div>
+      <div class="energy-grid">
+        <div>
+          <div class="energy-stat-label">Active</div>
+          <div class="energy-val" id="activeKcal">–<span>kcal</span></div>
+          <div class="mini-progress">
+            <div class="mini-progress-fill" id="activeBar" style="width:0%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="energy-stat-label">Basal</div>
+          <div class="energy-val" id="basalKcal">–<span>kcal</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WATER CARD -->
+    <div class="card">
+      <div class="water-header">
+        <span class="label">Water Intake</span>
+        <span class="water-ml" id="waterMl">– ml</span>
+      </div>
+      <div style="margin-top:2px;">
+        <span class="big-stat" id="waterCups">–</span>
+        <span style="font-size:14px;font-weight:600;color:var(--ink-2);margin-left:3px;">cups</span>
+      </div>
+      <div class="cups-row" id="cupsRow"></div>
+      <div class="progress-bar-wrap" style="height:4px;">
+        <div class="progress-bar-fill goal-unmet" id="waterBar" style="width:0%;height:4px;"></div>
+      </div>
+    </div>
+
+    <!-- WORKOUTS CARD -->
+    <div class="card">
+      <div class="workout-header">
+        <span class="label">Workouts</span>
+        <span class="workout-count" id="workoutCount">This week · – sessions</span>
+      </div>
+      <div id="workoutRows"></div>
+    </div>
+
+  </div><!-- /scroll-area -->
+
+  <!-- SCRIM -->
+  <div class="scrim" id="scrim"></div>
+
+  <!-- BOTTOM SHEET -->
+  <div class="bottom-sheet" id="bottomSheet">
+    <div class="grabber"></div>
+    <div class="sheet-title-row">
+      <div class="sheet-title-left">
+        <span class="sheet-target">Daily Target</span>
+        <span class="sheet-subtitle">Steps per day</span>
+      </div>
+      <button class="close-btn" id="closeSheet">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M1 1l12 12M13 1L1 13"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="draft-display">
+      <span id="draftValue">8,000</span>
+      <span class="draft-unit">steps</span>
+    </div>
+
+    <div class="slider-wrap">
+      <input type="range" id="goalSlider" min="1000" max="25000" step="500" value="8000" />
+      <div class="slider-minmax"><span>1,000</span><span>25,000</span></div>
+    </div>
+
+    <div class="chips-row" id="chipsRow">
+      <button class="chip" data-val="5000">5k</button>
+      <button class="chip" data-val="8000">8k</button>
+      <button class="chip" data-val="10000">10k</button>
+      <button class="chip" data-val="12000">12k</button>
+    </div>
+
+    <button class="primary-btn" id="commitGoalBtn">Set goal</button>
+  </div>
+
+</div><!-- /phone -->
+
+<script>
+// ─── Bridge ──────────────────────────────────────────────────────────────────
+const isNative = typeof window.ReactNativeWebView !== 'undefined'
+
+function postToApp(key, data = null) {
+  const text = JSON.stringify({ key, data })
+  if (isNative) window.ReactNativeWebView.postMessage(text)
+  else window.parent.postMessage(text, '*')
+}
+
+let _reqId = 0
+const _pending = {}
+
+function restRequest(method, model, data, specialParams) {
+  return new Promise((resolve, reject) => {
+    const id = 'req-' + (++_reqId)
+    _pending[id] = { resolve, reject }
+    const text = JSON.stringify({ key: 'REST_REQUEST', method, model, data, id, specialParams: specialParams || null })
+    if (isNative) window.ReactNativeWebView.postMessage(text)
+    else window.parent.postMessage(text, '*')
+  })
+}
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {}
+let goal = 8000
+let cups = 5
+let modalOpen = false
+let draft = 8000
+let barsAnimated = false
+
+// Mock data fallback
+const MOCK = {
+  WEEK: [
+    { d: 'SUN', v: 6200 }, { d: 'MON', v: 9400 }, { d: 'TUE', v: 19800 },
+    { d: 'WED', v: 22600 }, { d: 'THU', v: 9100 }, { d: 'FRI', v: 3800 },
+    { d: 'SAT', v: 19400 }
+  ],
+  TODAY_STEPS: 5000,
+  YESTERDAY_STEPS: 7000,
+  HEART_BPM: 100,
+  RESTING_BPM: 62,
+  RESTING_AVG: 64,
+  SLEEP: { totalMin: 7*60+24, stages: [{ key:'deep', label:'Deep', min:78 }, { key:'rem', label:'REM', min:112 }, { key:'light', label:'Light', min:224 }, { key:'awake', label:'Awake', min:30 }], start: '11:38 PM', end: '7:43 AM' },
+  CALORIES: { activeGoal: 600, active: 412, basal: 1480 },
+  WATER: { cups: 5, goal: 8, mlPerCup: 240 },
+  WORKOUTS: [
+    { type: 'Run', dur: 38, kcal: 412, time: 'Today · 7:12 AM' },
+    { type: 'Strength', dur: 45, kcal: 286, time: 'Yesterday' },
+    { type: 'Yoga', dur: 30, kcal: 132, time: 'May 10' }
+  ]
+}
+
+let healthData = { ...MOCK }
+
+// ─── App theme ────────────────────────────────────────────────────────────────
+async function applyAppTheme() {
+  try {
+    const appId = state.ACTIVITY_RESPONSE?.app
+    const [appRes, settingsRes] = await Promise.all([
+      appId ? restRequest('get', 'App', appId) : Promise.resolve(null),
+      restRequest('list', 'Settings', {})
+    ])
+    const appTheme      = appRes?.theme || {}
+    const platformTheme = settingsRes?.items?.[0]?.theme || {}
+    const colors = Object.assign({}, platformTheme.colors, appTheme.colors)
+    if (colors.primary) {
+      document.documentElement.style.setProperty('--accent', colors.primary)
+    }
+  } catch (e) {
+    // Fall back to default --accent from CSS
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function fmtNum(n) { return n != null ? n.toLocaleString() : '–' }
+function fmtMin(m) {
+  if (m == null) return '–'
+  const h = Math.floor(m / 60)
+  const mm = m % 60
+  return h > 0 ? `${h}h ${mm}m` : `${mm}m`
+}
+
+function updateSliderStyle() {
+  const slider = document.getElementById('goalSlider')
+  const pct = ((draft - 1000) / (25000 - 1000)) * 100
+  slider.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--hair) ${pct}%)`
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderAll() {
+  renderHeader()
+  renderSteps()
+  renderHeart()
+  renderSleep()
+  renderEnergy()
+  renderWater()
+  renderWorkouts()
+}
+
+function renderHeader() {
+  const now = new Date()
+  document.getElementById('headerDate').textContent =
+    now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }).toUpperCase()
+}
+
+function renderSteps() {
+  const week = healthData.WEEK || MOCK.WEEK
+  const avg = Math.round(week.reduce((s, d) => s + d.v, 0) / week.length)
+  document.getElementById('avgSteps').textContent = fmtNum(avg)
+
+  // Chart
+  renderChart(week)
+
+  // Today / Yesterday
+  const today = healthData.TODAY_STEPS ?? MOCK.TODAY_STEPS
+  const yest  = healthData.YESTERDAY_STEPS ?? MOCK.YESTERDAY_STEPS
+
+  document.getElementById('todaySteps').textContent = fmtNum(today)
+  document.getElementById('yestSteps').textContent  = fmtNum(yest)
+  document.getElementById('todayGoalLabel').textContent = fmtNum(goal) + ' goal'
+  document.getElementById('yestGoalLabel').textContent  = fmtNum(goal) + ' goal'
+
+  const todayPct = Math.min(100, (today / goal) * 100)
+  const yestPct  = Math.min(100, (yest  / goal) * 100)
+
+  const todayBar = document.getElementById('todayBar')
+  const yestBar  = document.getElementById('yestBar')
+  todayBar.style.width = todayPct + '%'
+  yestBar.style.width  = yestPct + '%'
+  todayBar.className = 'progress-bar-fill ' + (today >= goal ? 'goal-met' : 'goal-unmet')
+  yestBar.className  = 'progress-bar-fill ' + (yest  >= goal ? 'goal-met' : 'goal-unmet')
+}
+
+function renderChart(week) {
+  const CEIL = 25000
+  const barsArea = document.getElementById('chartBars')
+  const xlabels  = document.getElementById('chartXLabels')
+  const tickLines = document.getElementById('chartTickLines')
+
+  barsArea.innerHTML = ''
+  xlabels.innerHTML  = ''
+  tickLines.innerHTML = ''
+
+  // Tick lines at 5k, 10k, 20k
+  ;[5000, 10000, 20000].forEach(v => {
+    const pct = (v / CEIL) * 100
+    const line = document.createElement('div')
+    line.className = 'tick-line'
+    line.style.bottom = pct + '%'
+    tickLines.appendChild(line)
+  })
+
+  // Goal line
+  const goalPct = Math.min(100, (goal / CEIL) * 100)
+  const gLine = document.createElement('div')
+  gLine.className = 'goal-line'
+  gLine.style.bottom = goalPct + '%'
+  const gLabel = document.createElement('div')
+  gLabel.className = 'goal-line-label'
+  gLabel.style.bottom = goalPct + '%'
+  gLabel.textContent = 'GOAL · ' + fmtNum(goal)
+  tickLines.appendChild(gLine)
+  tickLines.appendChild(gLabel)
+
+  // Bars
+  week.forEach((day, i) => {
+    const col = document.createElement('div')
+    col.className = 'bar-col'
+
+    const bar = document.createElement('div')
+    bar.className = 'bar ' + (day.v >= goal ? 'above-goal' : 'below-goal')
+    const heightPct = (day.v / CEIL) * 100
+    bar.style.height = heightPct + '%'
+    col.appendChild(bar)
+    barsArea.appendChild(col)
+
+    const lbl = document.createElement('div')
+    lbl.className = 'chart-xlabel'
+    lbl.textContent = day.d
+    xlabels.appendChild(lbl)
+
+    if (!barsAnimated) {
+      setTimeout(() => { bar.style.transform = 'scaleY(1)' }, 100 + i * 50)
+    } else {
+      bar.style.transform = 'scaleY(1)'
+      bar.style.transition = 'none'
+    }
+  })
+  barsAnimated = true
+}
+
+function renderHeart() {
+  document.getElementById('heartBpm').textContent = fmtNum(healthData.HEART_BPM ?? MOCK.HEART_BPM)
+  document.getElementById('restingBpm').textContent = fmtNum(healthData.RESTING_BPM ?? MOCK.RESTING_BPM)
+  document.getElementById('restingSub').textContent = `7-day avg · ${healthData.RESTING_AVG ?? MOCK.RESTING_AVG}`
+}
+
+function renderSleep() {
+  const sl = healthData.SLEEP || MOCK.SLEEP
+  document.getElementById('sleepTotal').textContent = fmtMin(sl.totalMin)
+  document.getElementById('sleepRange').textContent = sl.start + ' – ' + sl.end
+
+  const totalStageMin = sl.stages.reduce((s, st) => s + st.min, 0)
+  const stageBar = document.getElementById('stageBar')
+  const legend   = document.getElementById('stageLegend')
+  stageBar.innerHTML = ''
+  legend.innerHTML = ''
+
+  const stageColors = {
+    deep:  'var(--accent)',
+    rem:   'color-mix(in oklab, var(--accent) 65%, white)',
+    light: 'color-mix(in oklab, var(--accent) 32%, white)',
+    awake: 'var(--hair)'
+  }
+
+  sl.stages.forEach(st => {
+    const seg = document.createElement('div')
+    seg.className = 'stage-segment'
+    seg.style.width = ((st.min / totalStageMin) * 100) + '%'
+    seg.style.background = stageColors[st.key] || 'var(--muted)'
+    stageBar.appendChild(seg)
+
+    const item = document.createElement('div')
+    item.className = 'legend-item'
+    item.innerHTML = `
+      <div class="legend-swatch-row">
+        <div class="legend-swatch" style="background:${stageColors[st.key] || 'var(--muted)'}"></div>
+        <span class="legend-label">${st.label}</span>
+      </div>
+      <span class="legend-val">${fmtMin(st.min)}</span>
+    `
+    legend.appendChild(item)
+  })
+}
+
+function renderEnergy() {
+  const c = healthData.CALORIES || MOCK.CALORIES
+  document.getElementById('totalKcal').innerHTML = `${fmtNum(c.active + c.basal)}<span style="font-size:14px;font-weight:600;color:var(--ink-2);margin-left:3px;">kcal</span>`
+  document.getElementById('activeKcal').innerHTML = `${fmtNum(c.active)}<span>kcal</span>`
+  document.getElementById('basalKcal').innerHTML  = `${fmtNum(c.basal)}<span>kcal</span>`
+
+  const stackBar = document.getElementById('stackBar')
+  const total = c.active + c.basal
+  const activePct = (c.active / total) * 100
+  stackBar.innerHTML = `
+    <div style="width:${activePct}%;background:var(--accent);height:100%;"></div>
+    <div style="flex:1;background:color-mix(in oklab,var(--accent) 20%,white);height:100%;"></div>
+  `
+
+  const activeProg = Math.min(100, (c.active / c.activeGoal) * 100)
+  document.getElementById('activeBar').style.width = activeProg + '%'
+}
+
+function renderWater() {
+  const w = healthData.WATER || MOCK.WATER
+  document.getElementById('waterCups').textContent = `${cups}/${w.goal}`
+  document.getElementById('waterMl').textContent   = fmtNum(cups * w.mlPerCup) + ' ml'
+
+  const cupsRow = document.getElementById('cupsRow')
+  cupsRow.innerHTML = ''
+  for (let i = 0; i < w.goal; i++) {
+    const btn = document.createElement('button')
+    btn.className = 'cup-btn' + (i < cups ? ' filled' : '')
+    btn.innerHTML = `
+      <div class="cup-fill" style="height:${i < cups ? '60%' : '0%'}"></div>
+      <svg class="cup-icon" width="14" height="16" viewBox="0 0 14 16" fill="none">
+        <path d="M1 3h12l-1.5 11H2.5L1 3Z" stroke="${i < cups ? 'var(--accent)' : 'var(--muted)'}" stroke-width="1.5" fill="none"/>
+        <path d="M1 3h12" stroke="${i < cups ? 'var(--accent)' : 'var(--muted)'}" stroke-width="1.5"/>
+      </svg>
+    `
+    const idx = i
+    btn.addEventListener('click', () => {
+      cups = (cups === idx + 1) ? idx : idx + 1
+      renderWater()
+    })
+    cupsRow.appendChild(btn)
+  }
+
+  const pct = Math.min(100, (cups / w.goal) * 100)
+  document.getElementById('waterBar').style.width = pct + '%'
+}
+
+function renderWorkouts() {
+  const list = healthData.WORKOUTS || MOCK.WORKOUTS
+  document.getElementById('workoutCount').textContent = `This week · ${list.length} sessions`
+
+  const abbr = { Run:'RUN', Strength:'STR', Yoga:'YGA', Cycling:'CYC', Swimming:'SWM', Walk:'WLK' }
+  const rows = document.getElementById('workoutRows')
+  rows.innerHTML = ''
+  list.forEach(w => {
+    const row = document.createElement('div')
+    row.className = 'workout-row'
+    row.innerHTML = `
+      <div class="workout-glyph">${abbr[w.type] || w.type.slice(0,3).toUpperCase()}</div>
+      <div class="workout-info">
+        <div class="workout-type">${w.type}</div>
+        <div class="workout-time">${w.time}</div>
+      </div>
+      <div class="workout-right">
+        <div class="workout-dur">${w.dur} min</div>
+        <div class="workout-kcal">${fmtNum(w.kcal)} kcal</div>
+      </div>
+    `
+    rows.appendChild(row)
+  })
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+function openModal() {
+  draft = goal
+  document.getElementById('draftValue').textContent = fmtNum(draft)
+  document.getElementById('goalSlider').value = draft
+  updateSliderStyle()
+  updateChips()
+  document.getElementById('scrim').classList.add('visible')
+  document.getElementById('bottomSheet').classList.add('open')
+  modalOpen = true
+}
+
+function closeModal() {
+  document.getElementById('scrim').classList.remove('visible')
+  document.getElementById('bottomSheet').classList.remove('open')
+  modalOpen = false
+}
+
+function commitGoal() {
+  goal = draft
+  closeModal()
+  barsAnimated = false
+  renderAll()
+}
+
+function updateDraft(val) {
+  draft = val
+  document.getElementById('draftValue').textContent = fmtNum(draft)
+  document.getElementById('goalSlider').value = draft
+  updateSliderStyle()
+  updateChips()
+}
+
+function updateChips() {
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('active', parseInt(c.dataset.val) === draft)
+  })
+}
+
+document.getElementById('setGoalBtn').addEventListener('click', openModal)
+document.getElementById('closeSheet').addEventListener('click', closeModal)
+document.getElementById('scrim').addEventListener('click', closeModal)
+document.getElementById('commitGoalBtn').addEventListener('click', commitGoal)
+
+document.getElementById('goalSlider').addEventListener('input', e => {
+  updateDraft(parseInt(e.target.value))
+})
+
+document.querySelectorAll('.chip').forEach(c => {
+  c.addEventListener('click', () => updateDraft(parseInt(c.dataset.val)))
+})
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && modalOpen) closeModal()
+})
+
+// ─── Health Data Loading ───────────────────────────────────────────────────────
+async function loadHealthData() {
+  if (!state.USER) return // no Cogniss context — use mock
+
+  try {
+    const now = new Date()
+    const todayStart = new Date(now); todayStart.setHours(0,0,0,0)
+    const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate()-1)
+    const weekAgo = new Date(todayStart); weekAgo.setDate(weekAgo.getDate()-7)
+
+    // Steps last 7 days
+    const stepsRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id,
+      type: 'STEP_COUNT',
+      sort: '-start',
+      limit: 50
+    })
+    if (stepsRes && stepsRes.items && stepsRes.items.length) {
+      // Group by day
+      const dayMap = {}
+      stepsRes.items.forEach(r => {
+        const d = new Date(r.start)
+        const key = d.toLocaleDateString('en-US', { weekday:'short' }).toUpperCase()
+        dayMap[key] = (dayMap[key] || 0) + (r.value || 0)
+      })
+      const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT']
+      healthData.WEEK = DAYS.map(d => ({ d, v: Math.round(dayMap[d] || 0) }))
+      healthData.TODAY_STEPS = Math.round(stepsRes.items
+        .filter(r => new Date(r.start) >= todayStart)
+        .reduce((s, r) => s + (r.value||0), 0))
+      healthData.YESTERDAY_STEPS = Math.round(stepsRes.items
+        .filter(r => new Date(r.start) >= yesterdayStart && new Date(r.start) < todayStart)
+        .reduce((s, r) => s + (r.value||0), 0))
+    }
+
+    // Heart rate
+    const hrRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'HEART_RATE', sort: '-start', limit: 1
+    })
+    if (hrRes?.items?.[0]) healthData.HEART_BPM = Math.round(hrRes.items[0].value)
+
+    // Resting HR
+    const rhrRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'RESTING_HEART_RATE', sort: '-start', limit: 7
+    })
+    if (rhrRes?.items?.length) {
+      healthData.RESTING_BPM = Math.round(rhrRes.items[0].value)
+      const avg7 = Math.round(rhrRes.items.reduce((s, r) => s + r.value, 0) / rhrRes.items.length)
+      healthData.RESTING_AVG = avg7
+    }
+
+    // Sleep
+    const sleepRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'SLEEP_SAMPLES', sort: '-start', limit: 30
+    })
+    if (sleepRes?.items?.length) {
+      const lastNight = sleepRes.items.filter(r => new Date(r.start) >= yesterdayStart)
+      if (lastNight.length) {
+        const asleepMin = Math.round(lastNight.filter(r=>r.classification==='ASLEEP').reduce((s,r)=>{
+          return s + (new Date(r.end)-new Date(r.start))/60000
+        },0))
+        const awakeMn  = Math.round(lastNight.filter(r=>r.classification==='AWAKE').reduce((s,r)=>{
+          return s + (new Date(r.end)-new Date(r.start))/60000
+        },0))
+        const times = lastNight.map(r=>new Date(r.start))
+        const startT = new Date(Math.min(...times))
+        const endT   = new Date(Math.max(...lastNight.map(r=>new Date(r.end))))
+        const fmt = d => d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+        healthData.SLEEP = {
+          totalMin: asleepMin,
+          stages: [
+            { key:'deep',  label:'Deep',  min: Math.round(asleepMin * 0.18) },
+            { key:'rem',   label:'REM',   min: Math.round(asleepMin * 0.25) },
+            { key:'light', label:'Light', min: Math.round(asleepMin * 0.50) },
+            { key:'awake', label:'Awake', min: awakeMn || Math.round(asleepMin * 0.07) }
+          ],
+          start: fmt(startT),
+          end: fmt(endT)
+        }
+      }
+    }
+
+    // Calories
+    const activeRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'ACTIVE_ENERGY_BURNED', sort: '-start', limit: 50
+    })
+    if (activeRes?.items?.length) {
+      const active = Math.round(activeRes.items.filter(r => new Date(r.start) >= todayStart).reduce((s,r)=>s+(r.value||0),0))
+      if (active > 0) healthData.CALORIES = { ...MOCK.CALORIES, active }
+    }
+    const basalRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'BASAL_ENERGY_BURNED', sort: '-start', limit: 50
+    })
+    if (basalRes?.items?.length) {
+      const basal = Math.round(basalRes.items.filter(r => new Date(r.start) >= todayStart).reduce((s,r)=>s+(r.value||0),0))
+      if (basal > 0) healthData.CALORIES.basal = basal
+    }
+
+    // Water
+    const waterRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'WATER', sort: '-start', limit: 20
+    })
+    if (waterRes?.items?.length) {
+      const totalLitres = waterRes.items.filter(r => new Date(r.start) >= todayStart).reduce((s,r)=>s+(r.value||0),0)
+      const mlPerCup = 240
+      cups = Math.round((totalLitres * 1000) / mlPerCup)
+    }
+
+    // Workouts
+    const woRes = await restRequest('list', 'AppleHealthRecord', {
+      user: state.USER.id, type: 'WORKOUT', sort: '-start', limit: 10
+    })
+    if (woRes?.items?.length) {
+      const fmt = d => {
+        const diff = Math.floor((now - new Date(d)) / 86400000)
+        if (diff === 0) return 'Today · ' + new Date(d).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+        if (diff === 1) return 'Yesterday'
+        return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+      }
+      healthData.WORKOUTS = woRes.items.slice(0,5).map(w => ({
+        type: w.activityName || 'Workout',
+        dur:  Math.round((new Date(w.end) - new Date(w.start)) / 60000),
+        kcal: Math.round(w.calories || 0),
+        time: fmt(w.start)
+      }))
+    }
+
+    // Goal from CONFIG
+    if (state.CONFIG && state.CONFIG.step_goal) {
+      goal = parseInt(state.CONFIG.step_goal) || 8000
+    }
+
+  } catch (err) {
+    postToApp('LOG', { message: 'Health data error: ' + err.message })
+    // Fall back to mock silently
+  }
+}
+
+// ─── Init messages ────────────────────────────────────────────────────────────
+const REQUIRED = new Set(['USER','CONFIG'])
+const received  = new Set()
+
+function handleMessage(msg) {
+  if (msg.key === 'REQUEST_RESPONSE') {
+    const p = _pending[msg.id]
+    if (p) {
+      delete _pending[msg.id]
+      msg.error ? p.reject(new Error(msg.error)) : p.resolve(msg.data)
+    }
+    return
+  }
+
+  if (REQUIRED.has(msg.key)) {
+    state[msg.key] = msg.data
+    received.add(msg.key)
+  } else if (['API','AUTH','ACTIVITY','ACTIVITY_RESPONSE','USER_ACTIVITY','TEMPLATE'].includes(msg.key)) {
+    state[msg.key] = msg.data
+  }
+
+  if (REQUIRED.size === received.size || !window.parent || window.parent === window) {
+    // All required data received — start loading
+    if (!window._initStarted) {
+      window._initStarted = true
+      init()
+    }
+  }
+}
+
+async function init() {
+  await Promise.all([applyAppTheme(), loadHealthData()])
+  renderAll()
+  updateSliderStyle()
+
+  // Hide loading screen
+  const ls = document.getElementById('loadingScreen')
+  ls.classList.add('hidden')
+  setTimeout(() => ls.style.display = 'none', 400)
+}
+
+function onMessage(event) {
+  try {
+    const message = JSON.parse(event.data)
+    if (!message || !message.key) return
+    handleMessage(message)
+  } catch(e) {}
+}
+document.addEventListener('message', onMessage)
+window.addEventListener('message', onMessage)
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+postToApp('READY_DYNAMIC_MEDIA')
+
+// If running standalone (no Cogniss parent), boot immediately with mock data
+setTimeout(() => {
+  if (!window._initStarted) {
+    window._initStarted = true
+    init()
+  }
+}, 800)
+</script>
+</body>
+</html>
