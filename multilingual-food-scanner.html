@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Food Scanner</title>
+
+<!-- Fonts: Cormorant Garamond (display, multi-script friendly) + Inter (body, broad Latin/CJK coverage via system fallback) + Noto Sans SC for Chinese -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- ZXing browser library for iOS/Safari fallback (where BarcodeDetector is absent) -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+
+<style>
+  :root {
+    --bg: #faf6f0;
+    --paper: #ffffff;
+    --ink: #2b2a26;
+    --ink-soft: #6b6760;
+    --line: #e6dfd2;
+    --accent: #c5532f;
+    --accent-soft: #f4d9cb;
+    --good: #4a7c59;
+    --warn: #c8902a;
+    --bad: #b04525;
+    --shadow: 0 1px 2px rgba(43, 42, 38, 0.04), 0 8px 24px rgba(43, 42, 38, 0.06);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); }
+  body {
+    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: contain;
+  }
+
+  .app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+
+  /* ---------- Screen container ---------- */
+  .screen { flex: 1; display: none; flex-direction: column; padding: 28px 22px 32px; }
+  .screen.active { display: flex; }
+
+  .lang-tag {
+    align-self: flex-start; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-soft); padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--paper);
+  }
+
+  /* ---------- Headings ---------- */
+  h1, h2 {
+    font-family: 'Cormorant Garamond', 'Noto Sans SC', serif;
+    font-weight: 600; margin: 0; color: var(--ink);
+    letter-spacing: -0.01em; line-height: 1.15;
+  }
+  h1 { font-size: 34px; }
+  h2 { font-size: 26px; }
+  .subhead { color: var(--ink-soft); font-size: 15px; line-height: 1.55; margin: 10px 0 0; }
+
+  /* ---------- Language picker ---------- */
+  .lang-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 28px; }
+  .lang-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px; background: var(--paper); border: 1px solid var(--line);
+    border-radius: 14px; cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+    text-align: left; font-family: inherit;
+  }
+  .lang-btn:hover, .lang-btn:active { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+  .lang-btn .native {
+    font-family: 'Cormorant Garamond', 'Noto Sans SC', serif; font-size: 22px; font-weight: 600;
+  }
+  .lang-btn .en-name { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+  .lang-btn .arrow { color: var(--accent); font-size: 18px; }
+
+  /* ---------- Scan screen ---------- */
+  .top-bar {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;
+  }
+  .change-lang {
+    background: none; border: none; color: var(--ink-soft); font-family: inherit; font-size: 13px;
+    cursor: pointer; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .done-btn {
+    background: none; border: 1px solid var(--line); color: var(--ink); font-family: inherit;
+    font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  }
+  .done-btn:hover { border-color: var(--accent); }
+
+  .scan-hero {
+    margin: 8px 0 28px;
+    padding: 0; text-align: left;
+  }
+  .scan-hero .eyebrow {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
+    font-weight: 500; margin-bottom: 10px;
+  }
+
+  .capture-card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 18px;
+    padding: 28px 22px; margin-top: 18px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  .icon-camera {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--accent-soft); display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+  }
+  .icon-camera svg { width: 32px; height: 32px; }
+
+  .primary-btn, .secondary-btn {
+    font-family: inherit; font-size: 16px; font-weight: 500; padding: 14px 22px;
+    border-radius: 12px; cursor: pointer; width: 100%; text-align: center; transition: opacity 0.12s ease;
+    border: none;
+  }
+  .primary-btn { background: var(--accent); color: white; }
+  .primary-btn:active { opacity: 0.85; }
+  .secondary-btn { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .secondary-btn:hover { border-color: var(--accent); }
+
+  .file-input-wrap { position: relative; width: 100%; }
+  .file-input-wrap input[type="file"] {
+    position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; cursor: pointer;
+  }
+
+  .divider {
+    display: flex; align-items: center; gap: 12px; color: var(--ink-soft); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.15em; width: 100%;
+  }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  .manual-form { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .manual-form input {
+    font-family: 'JetBrains Mono', 'Inter', monospace; font-size: 16px; padding: 14px 16px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink);
+    -webkit-appearance: none; width: 100%;
+  }
+  .manual-form input:focus { outline: none; border-color: var(--accent); background: var(--paper); }
+
+  /* ---------- Loading / result ---------- */
+  .status {
+    margin-top: 22px; padding: 16px 18px; background: var(--paper); border: 1px solid var(--line);
+    border-radius: 12px; font-size: 14px; color: var(--ink-soft); display: flex; align-items: center; gap: 12px;
+  }
+  .status.error { border-color: var(--bad); color: var(--bad); }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Result screen ---------- */
+  .result-card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 18px;
+    overflow: hidden; box-shadow: var(--shadow); margin-top: 18px;
+  }
+  .product-head { padding: 22px 22px 18px; border-bottom: 1px solid var(--line); }
+  .product-brand { font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-soft); }
+  .product-name {
+    font-family: 'Cormorant Garamond', 'Noto Sans SC', serif; font-size: 26px; line-height: 1.2;
+    margin-top: 6px; font-weight: 600;
+  }
+  .nutri {
+    display: flex; align-items: center; gap: 10px; margin-top: 14px;
+  }
+  .nutri-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%; color: white; font-weight: 600; font-size: 16px;
+  }
+  .nutri-badge.a { background: #038141; }
+  .nutri-badge.b { background: #85bb2f; }
+  .nutri-badge.c { background: #fecb02; color: #2b2a26; }
+  .nutri-badge.d { background: #ee8100; }
+  .nutri-badge.e { background: #e63e11; }
+  .nutri-badge.unknown { background: var(--ink-soft); }
+  .nutri-label { font-size: 13px; color: var(--ink-soft); }
+
+  .nutrition-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); padding: 16px 0;
+    border-bottom: 1px solid var(--line); background: var(--bg);
+  }
+  .nutrition-strip > div { text-align: center; padding: 4px 6px; }
+  .nutrition-strip > div + div { border-left: 1px solid var(--line); }
+  .nutrition-strip .v {
+    font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600;
+  }
+  .nutrition-strip .l {
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft);
+    margin-top: 2px;
+  }
+
+  .swap-block { padding: 22px; }
+  .swap-eyebrow {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
+    font-weight: 500; margin-bottom: 10px;
+  }
+  .swap-body {
+    font-family: 'Cormorant Garamond', 'Noto Sans SC', serif; font-size: 22px; font-style: italic;
+    line-height: 1.4; color: var(--ink);
+  }
+
+  .scan-again-row { display: flex; gap: 12px; margin-top: 22px; }
+  .scan-again-row > button { flex: 1; }
+
+  /* ---------- Config-missing screen (dev aid) ---------- */
+  .config-missing {
+    background: var(--paper); padding: 24px; border-radius: 14px; border: 1px solid var(--line);
+    margin-top: 14px;
+  }
+  .config-missing pre {
+    background: var(--bg); padding: 14px; border-radius: 8px; font-size: 11px; overflow-x: auto;
+    border: 1px solid var(--line); margin: 12px 0 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .config-missing code { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  /* ---------- Done summary ---------- */
+  .done-summary { text-align: center; margin: 40px 0; }
+  .done-summary .check {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--good);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 18px;
+    color: white;
+  }
+  .scans-counter { font-size: 14px; color: var(--ink-soft); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ LANGUAGE PICKER ============ -->
+  <section id="screen-lang" class="screen">
+    <span class="lang-tag" id="langTagBoot">welcome / bienvenido / 欢迎</span>
+    <div style="margin-top: 22px;">
+      <h1 id="welcomeTitle">Find healthier food, in your language.</h1>
+      <p class="subhead" id="welcomeSubtitle">Choose your language to begin.</p>
+    </div>
+    <div class="lang-grid" id="langGrid"></div>
+  </section>
+
+  <!-- ============ SCAN / CAPTURE ============ -->
+  <section id="screen-scan" class="screen">
+    <div class="top-bar">
+      <button class="change-lang" id="changeLangBtn">↺ change language</button>
+      <button class="done-btn" id="doneBtn">Done</button>
+    </div>
+    <div class="scan-hero">
+      <div class="eyebrow" id="scanEyebrow">Step 1</div>
+      <h2 id="scanTitle">Scan a product</h2>
+      <p class="subhead" id="scanSubtitle">Take a photo of the barcode or enter the number.</p>
+    </div>
+
+    <div class="capture-card">
+      <div class="icon-camera">
+        <!-- camera icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </div>
+      <div class="file-input-wrap">
+        <button class="primary-btn" id="captureBtnVisible" type="button">Take photo</button>
+        <input type="file" id="captureInput" accept="image/*" capture="environment">
+      </div>
+
+      <div class="divider"><span id="orLabel">or</span></div>
+
+      <form class="manual-form" id="manualForm">
+        <input type="text" id="barcodeInput" inputmode="numeric" pattern="[0-9]*" placeholder="Enter barcode (e.g. 3017620422003)" maxlength="14">
+        <button class="secondary-btn" type="submit" id="manualLookupBtn">Look up</button>
+      </form>
+    </div>
+
+    <div id="scanStatus"></div>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section id="screen-result" class="screen">
+    <div class="top-bar">
+      <button class="change-lang" id="resultBackBtn">← back</button>
+      <button class="done-btn" id="doneBtn2">Done</button>
+    </div>
+
+    <div class="result-card">
+      <div class="product-head">
+        <div class="product-brand" id="productBrand"></div>
+        <div class="product-name" id="productName"></div>
+        <div class="nutri" id="nutriRow"></div>
+      </div>
+      <div class="nutrition-strip" id="nutritionStrip"></div>
+      <div class="swap-block">
+        <div class="swap-eyebrow" id="swapEyebrow">Healthier swap</div>
+        <div class="swap-body" id="swapBody"></div>
+      </div>
+    </div>
+
+    <div class="scan-again-row">
+      <button class="secondary-btn" id="scanAgainBtn">Scan another</button>
+    </div>
+  </section>
+
+  <!-- ============ DONE ============ -->
+  <section id="screen-done" class="screen">
+    <div class="done-summary">
+      <div class="check">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h2 id="doneTitle">All done</h2>
+      <p class="subhead" id="doneSubtitle">Thanks for scanning today.</p>
+      <p class="scans-counter" id="scansCounter"></p>
+    </div>
+  </section>
+
+  <!-- ============ CONFIG MISSING (dev aid) ============ -->
+  <section id="screen-config-missing" class="screen">
+    <h2>Activity not configured</h2>
+    <p class="subhead">This activity is missing its <code>customConfig</code>. The app admin needs to set the following keys in the Activity's Custom config field:</p>
+    <div class="config-missing">
+      <strong>Required keys:</strong>
+      <pre id="configExample"></pre>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ============================================================================
+// Cogniss External Template: Multilingual Barcode Food Scanner
+// Mode: Hybrid — external API (Open Food Facts) + per-scan QUESTION_RESPONSE
+// ============================================================================
+
+// ---------- Bridge -----------------------------------------------------------
+const isNative = typeof window.ReactNativeWebView !== 'undefined';
+
+function postToApp(key, data) {
+  const text = JSON.stringify({ key: key, data: data === undefined ? null : data });
+  if (isNative) {
+    window.ReactNativeWebView.postMessage(text);
+  } else if (window.parent && window.parent !== window) {
+    window.parent.postMessage(text, '*');
+  }
+}
+
+const state = {};
+const REQUIRED = ['API', 'USER', 'AUTH', 'ACTIVITY', 'ACTIVITY_RESPONSE', 'CONFIG', 'QUESTIONS'];
+let initialised = false;
+let didQuit = false;
+
+function onMessage(event) {
+  try {
+    const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+    if (!message || !message.key) return;
+    state[message.key] = message.data;
+    if (!initialised && REQUIRED.every(k => state[k] !== undefined)) {
+      initialised = true;
+      initialise();
+    }
+  } catch (e) { /* swallow */ }
+}
+document.addEventListener('message', onMessage); // Android RN
+window.addEventListener('message', onMessage);   // iOS RN + web
+
+window.addEventListener('load', function() {
+  postToApp('READY_DYNAMIC_MEDIA');
+});
+
+// ---------- English source-of-truth strings (fallback for every language) ---
+const EN = {
+  langTagBoot: 'welcome',
+  welcomeTitle: 'Find healthier food, in your language.',
+  welcomeSubtitle: 'Choose your language to begin.',
+  scanEyebrow: 'Step 1',
+  scanTitle: 'Scan a product',
+  scanSubtitle: 'Take a photo of the barcode or enter the number.',
+  takePhoto: 'Take photo',
+  or: 'or',
+  enterBarcode: 'Enter barcode (e.g. 3017620422003)',
+  lookUp: 'Look up',
+  changeLang: '↺ change language',
+  done: 'Done',
+  back: '← back',
+  scanAgain: 'Scan another',
+  swapEyebrow: 'Healthier swap',
+  doneTitle: 'All done',
+  doneSubtitle: 'Thanks for scanning today.',
+  scansCounter: 'You scanned {count} product(s).',
+  lookingUp: 'Looking up product…',
+  decoding: 'Reading the barcode…',
+  noBarcodeFound: 'Could not read a barcode from that photo. Try again or enter the number.',
+  notFound: 'Product not found. Try a different item or enter the number.',
+  networkError: 'Could not reach the product database. Check your connection.',
+  invalidBarcode: 'Please enter a valid barcode (8–14 digits).',
+  brand: 'Brand',
+  energy: 'Energy',
+  sugar: 'Sugar',
+  salt: 'Salt',
+  fat: 'Fat',
+  per100g: 'per 100g',
+  nutriScore: 'Nutri-Score',
+  unknownScore: 'No score available',
+  defaultSwap: 'Whole, unprocessed foods are usually a better choice — fresh vegetables, fruit, legumes, or grains.'
+};
+
+// ---------- Effective text resolution (lang → key → EN fallback) ------------
+function t(key) {
+  const config = state.CONFIG || {};
+  const i18n = (config.i18n || {})[currentLang] || {};
+  return i18n[key] || EN[key] || key;
+}
+
+let currentLang = 'en';
+let scansLogged = 0;
+let lastResult = null;
+let zxingReader = null;
+
+// ---------- Init -----------------------------------------------------------
+function initialise() {
+  const config = state.CONFIG || {};
+  const languages = config.languages;
+  if (!Array.isArray(languages) || languages.length === 0) {
+    renderConfigMissing();
+    showScreen('screen-config-missing');
+    return;
+  }
+  renderLanguagePicker(languages);
+  showScreen('screen-lang');
+}
+
+function renderConfigMissing() {
+  const example = {
+    languages: [
+      { code: 'en', name: 'English', native: 'English' },
+      { code: 'es', name: 'Spanish', native: 'Español' },
+      { code: 'zh', name: 'Chinese (Simplified)', native: '简体中文' }
+    ],
+    i18n: {
+      es: { welcomeTitle: 'Encuentra comida más saludable, en tu idioma.', /* … */ },
+      zh: { welcomeTitle: '用您的母语,找到更健康的食物。', /* … */ }
+    },
+    swaps: {
+      'sugary-snacks': {
+        en: 'A handful of unsalted almonds gives steady energy without the sugar crash.',
+        es: 'Un puñado de almendras sin sal da energía estable sin el bajón de azúcar.',
+        zh: '一把无盐杏仁能提供稳定的能量,不会让你血糖骤降。'
+      }
+    }
+  };
+  document.getElementById('configExample').textContent = JSON.stringify(example, null, 2);
+}
+
+// ---------- Screen routing -------------------------------------------------
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+}
+
+// ---------- Language picker ------------------------------------------------
+function renderLanguagePicker(languages) {
+  const grid = document.getElementById('langGrid');
+  grid.innerHTML = '';
+  languages.forEach(lang => {
+    const btn = document.createElement('button');
+    btn.className = 'lang-btn';
+    btn.innerHTML = `
+      <div>
+        <div class="native">${escapeHtml(lang.native || lang.name || lang.code)}</div>
+        <div class="en-name">${escapeHtml(lang.name || '')}</div>
+      </div>
+      <span class="arrow">→</span>`;
+    btn.addEventListener('click', () => {
+      currentLang = lang.code;
+      applyLanguage();
+      showScreen('screen-scan');
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function applyLanguage() {
+  // update DOM strings for the scan & result screens
+  const map = {
+    scanEyebrow: 'scanEyebrow',
+    scanTitle: 'scanTitle',
+    scanSubtitle: 'scanSubtitle',
+    captureBtnVisible: 'takePhoto',
+    orLabel: 'or',
+    barcodeInput: { attr: 'placeholder', key: 'enterBarcode' },
+    manualLookupBtn: 'lookUp',
+    changeLangBtn: 'changeLang',
+    doneBtn: 'done',
+    doneBtn2: 'done',
+    resultBackBtn: 'back',
+    scanAgainBtn: 'scanAgain',
+    swapEyebrow: 'swapEyebrow',
+    doneTitle: 'doneTitle',
+    doneSubtitle: 'doneSubtitle'
+  };
+  Object.keys(map).forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const v = map[id];
+    if (typeof v === 'string') {
+      el.textContent = t(v);
+    } else {
+      el.setAttribute(v.attr, t(v.key));
+    }
+  });
+  document.documentElement.lang = currentLang;
+}
+
+// ---------- Capture handlers -----------------------------------------------
+document.getElementById('captureBtnVisible').addEventListener('click', () => {
+  document.getElementById('captureInput').click();
+});
+
+document.getElementById('captureInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  setStatus(t('decoding'), false);
+  try {
+    const barcode = await decodeBarcodeFromFile(file);
+    if (!barcode) { setStatus(t('noBarcodeFound'), true); return; }
+    await lookupAndShow(barcode);
+  } catch (err) {
+    setStatus(t('noBarcodeFound'), true);
+  } finally {
+    e.target.value = ''; // allow re-pick of same file
+  }
+});
+
+document.getElementById('manualForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const raw = document.getElementById('barcodeInput').value.trim();
+  if (!/^\d{8,14}$/.test(raw)) { setStatus(t('invalidBarcode'), true); return; }
+  await lookupAndShow(raw);
+});
+
+document.getElementById('changeLangBtn').addEventListener('click', () => {
+  clearStatus();
+  showScreen('screen-lang');
+});
+
+document.getElementById('resultBackBtn').addEventListener('click', () => {
+  clearStatus();
+  showScreen('screen-scan');
+});
+
+document.getElementById('scanAgainBtn').addEventListener('click', () => {
+  clearStatus();
+  document.getElementById('barcodeInput').value = '';
+  showScreen('screen-scan');
+});
+
+document.getElementById('doneBtn').addEventListener('click', completeActivity);
+document.getElementById('doneBtn2').addEventListener('click', completeActivity);
+
+// ---------- Decoders -------------------------------------------------------
+async function decodeBarcodeFromFile(file) {
+  // Try native BarcodeDetector first (Android Chromium)
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128']
+      });
+      const bitmap = await createImageBitmap(file);
+      const results = await detector.detect(bitmap);
+      if (results && results.length > 0) return results[0].rawValue;
+    } catch (e) { /* fall through to ZXing */ }
+  }
+  // Fallback: @zxing/browser (iOS Safari WebView, Firefox, older browsers)
+  if (window.ZXingBrowser) {
+    try {
+      if (!zxingReader) zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+      const url = URL.createObjectURL(file);
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url;
+      });
+      try {
+        const result = await zxingReader.decodeFromImageElement(img);
+        return result && result.getText ? result.getText() : null;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) { /* not found */ }
+  }
+  return null;
+}
+
+// ---------- Open Food Facts -----------------------------------------------
+async function lookupAndShow(barcode) {
+  setStatus(t('lookingUp'), false);
+  try {
+    // OFF API v2 — public, no auth, supports CORS
+    // Request only the fields we use
+    const fields = 'product_name,brands,nutriscore_grade,nutriments,categories_tags,image_front_small_url';
+    const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json.status !== 1 || !json.product) {
+      setStatus(t('notFound'), true);
+      return;
+    }
+    renderResult(barcode, json.product);
+    await recordScanResponse(barcode, json.product);
+    clearStatus();
+    showScreen('screen-result');
+  } catch (err) {
+    setStatus(t('networkError'), true);
+  }
+}
+
+function renderResult(barcode, product) {
+  const name = product.product_name || ('#' + barcode);
+  const brand = (product.brands || '').split(',')[0].trim();
+  const grade = (product.nutriscore_grade || '').toLowerCase();
+  const nutriments = product.nutriments || {};
+
+  document.getElementById('productBrand').textContent = brand || t('brand');
+  document.getElementById('productName').textContent = name;
+
+  // Nutri-score badge
+  const nutriRow = document.getElementById('nutriRow');
+  nutriRow.innerHTML = '';
+  if (grade && /[a-e]/.test(grade)) {
+    nutriRow.innerHTML = `<span class="nutri-badge ${grade}">${grade.toUpperCase()}</span><span class="nutri-label">${t('nutriScore')}</span>`;
+  } else {
+    nutriRow.innerHTML = `<span class="nutri-badge unknown">?</span><span class="nutri-label">${t('unknownScore')}</span>`;
+  }
+
+  // Nutrition strip (per 100g)
+  const strip = document.getElementById('nutritionStrip');
+  const values = [
+    { v: formatVal(nutriments['energy-kcal_100g'], 'kcal'), l: t('energy') },
+    { v: formatVal(nutriments['sugars_100g'], 'g'), l: t('sugar') },
+    { v: formatVal(nutriments['fat_100g'], 'g'), l: t('fat') },
+    { v: formatVal(nutriments['salt_100g'], 'g'), l: t('salt') }
+  ];
+  strip.innerHTML = values.map(x => `<div><div class="v">${x.v}</div><div class="l">${x.l}</div></div>`).join('');
+
+  // Swap suggestion — driven by OFF categories_tags + customConfig.swaps
+  const swap = pickSwap(product.categories_tags || [], grade);
+  document.getElementById('swapBody').textContent = swap;
+
+  lastResult = { barcode, name, brand, grade };
+}
+
+function formatVal(n, unit) {
+  if (n === undefined || n === null || isNaN(n)) return '—';
+  const v = Number(n);
+  return (v >= 100 ? Math.round(v) : v.toFixed(1)) + (unit ? ' ' + unit : '');
+}
+
+function pickSwap(categoryTags, grade) {
+  const swapsMap = (state.CONFIG && state.CONFIG.swaps) || {};
+  // categoryTags look like ["en:sugary-snacks", "en:biscuits"] — strip "en:" prefix
+  for (let i = 0; i < categoryTags.length; i++) {
+    const tag = categoryTags[i].replace(/^[a-z]{2}:/, '');
+    if (swapsMap[tag] && swapsMap[tag][currentLang]) return swapsMap[tag][currentLang];
+    if (swapsMap[tag] && swapsMap[tag].en) return swapsMap[tag].en;
+  }
+  // Generic fallback for low-score products
+  if (grade === 'd' || grade === 'e') {
+    const generic = swapsMap.__generic_unhealthy;
+    if (generic && (generic[currentLang] || generic.en)) return generic[currentLang] || generic.en;
+  }
+  return t('defaultSwap');
+}
+
+// ---------- QUESTION_RESPONSE per scan ------------------------------------
+async function recordScanResponse(barcode, product) {
+  // The template expects a SHORT_TEXT or LONG_TEXT question at index 0.
+  // We record one response per scan (non-linear mode using `index`), then never
+  // advance — multiple scans = multiple responses tied to the same question slot.
+  // Note: the container only stores one response per question index in linear mode,
+  // so app admins are advised to create one question per "scan slot" they want logged,
+  // or use the activity-response-level analytics.
+  //
+  // For simplicity in v1, we just record against question[scansLogged] if it exists,
+  // otherwise record everything against the last question (overwriting earlier scans).
+  const questions = state.QUESTIONS || [];
+  if (!questions.length) return; // nothing to record against
+
+  const idx = Math.min(scansLogged, questions.length - 1);
+  const q = questions[idx];
+  const payload = {
+    index: idx,
+    options: [],
+    duration: 0,
+    responseText: `${barcode} — ${product.product_name || ''} (${(product.nutriscore_grade || '?').toUpperCase()})`
+  };
+
+  // SHORT_TEXT / LONG_TEXT use `text`; we send both for safety
+  if (q && (q.type === 'SHORT_TEXT' || q.type === 'LONG_TEXT')) {
+    payload.text = payload.responseText;
+  }
+  postToApp('QUESTION_RESPONSE', payload);
+  scansLogged++;
+}
+
+// ---------- Completion -----------------------------------------------------
+function completeActivity() {
+  if (didQuit) return;
+  didQuit = true;
+
+  // Show done summary briefly before sending QUIT
+  document.getElementById('scansCounter').textContent =
+    t('scansCounter').replace('{count}', String(scansLogged));
+  showScreen('screen-done');
+
+  setTimeout(() => {
+    postToApp('QUIT', { completeState: 'COMPLETE' });
+  }, 1200);
+}
+
+// ---------- UI helpers -----------------------------------------------------
+function setStatus(msg, isError) {
+  const host = document.getElementById('scanStatus');
+  host.className = 'status' + (isError ? ' error' : '');
+  host.innerHTML = isError
+    ? escapeHtml(msg)
+    : `<span class="spinner"></span><span>${escapeHtml(msg)}</span>`;
+  host.style.display = 'flex';
+}
+function clearStatus() {
+  const host = document.getElementById('scanStatus');
+  host.style.display = 'none';
+  host.innerHTML = '';
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+</script>
+
+</body>
+</html>
