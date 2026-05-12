@@ -144,6 +144,7 @@
     <div class="brand">Pantry<span>·</span>Scan</div>
     <div class="count" id="scanCount">0 scans</div>
   </header>
+  <div id="diagStrip" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#666;background:#f0eadb;padding:4px 8px;border-bottom:1px solid var(--line);word-break:break-all;line-height:1.4">bridge: (waiting…)</div>
   <main>
     <section id="screenWelcome" class="screen welcome">
       <h1 id="welcomeTitle">Find healthier food, in your language.</h1>
@@ -234,6 +235,7 @@ function handleHostMessage(msg) {
     case 'QUESTIONS':         bridge.questions = msg.data || []; break;
     case 'CONFIG':            bridge.config = msg.data || {}; break;
   }
+  updateDiagnostic(msg.key);
   // Need ACTIVITY + QUESTIONS at minimum. CONFIG commonly arrives as {}.
   if (!bridge.ready && bridge.activity && bridge.questions !== null) {
     bridge.ready = true;
@@ -241,8 +243,29 @@ function handleHostMessage(msg) {
   }
 }
 
+// ---------- Diagnostic (temporary) --------------------------------------
+// Surfaces which bridge messages have arrived. Removed for production once
+// the mobile init issue is understood.
+const diag = { received: [] };
+function updateDiagnostic(key) {
+  diag.received.push(key);
+  const el = document.getElementById('diagStrip');
+  if (!el) return;
+  el.textContent = 'bridge: ' + diag.received.join(' · ')
+    + ' | activity:' + (bridge.activity ? 'Y' : 'N')
+    + ' | questions:' + (bridge.questions !== null ? bridge.questions.length : 'null')
+    + ' | config keys:' + Object.keys(bridge.config || {}).length;
+}
+
 window.addEventListener('load', function() {
   postToApp('READY_DYNAMIC_MEDIA', null);
+  // Also keep the diagnostic alive for 8s in case init never completes
+  setTimeout(function() {
+    if (!bridge.ready) {
+      const el = document.getElementById('diagStrip');
+      if (el) el.textContent += ' | STUCK — init never completed';
+    }
+  }, 8000);
 });
 
 // ---------- State --------------------------------------------------------
