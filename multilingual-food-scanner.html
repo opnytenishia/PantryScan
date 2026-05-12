@@ -413,6 +413,7 @@ let currentLang = 'en';
 let scansLogged = 0;
 let lastResult = null;
 let zxingReader = null;
+let scanStartTime = null; // ms timestamp when current scan began (for duration tracking)
 
 // ---------- Init -----------------------------------------------------------
 function initialise() {
@@ -515,6 +516,7 @@ document.getElementById('captureBtnVisible').addEventListener('click', () => {
 document.getElementById('captureInput').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
+  scanStartTime = Date.now();
   setStatus(t('decoding'), false);
   try {
     const barcode = await decodeBarcodeFromFile(file);
@@ -531,6 +533,7 @@ document.getElementById('manualForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const raw = document.getElementById('barcodeInput').value.trim();
   if (!/^\d{8,14}$/.test(raw)) { setStatus(t('invalidBarcode'), true); return; }
+  scanStartTime = Date.now();
   await lookupAndShow(raw);
 });
 
@@ -668,33 +671,40 @@ function pickSwap(categoryTags, grade) {
 
 // ---------- QUESTION_RESPONSE per scan ------------------------------------
 async function recordScanResponse(barcode, product) {
-  // The template expects a SHORT_TEXT or LONG_TEXT question at index 0.
-  // We record one response per scan (non-linear mode using `index`), then never
-  // advance — multiple scans = multiple responses tied to the same question slot.
-  // Note: the container only stores one response per question index in linear mode,
-  // so app admins are advised to create one question per "scan slot" they want logged,
-  // or use the activity-response-level analytics.
-  //
-  // For simplicity in v1, we just record against question[scansLogged] if it exists,
-  // otherwise record everything against the last question (overwriting earlier scans).
+  // Records one QuestionResponse per scan against question[scansLogged].
+  // The QuestionResponse model accepts: text, option, options, audio, image, duration.
+  // For free-text question types we send `text`. The Creator UI exposes the type
+  // as TEXT_RESPONSE, but the bridge spec also lists SHORT_TEXT / LONG_TEXT —
+  // we accept any of them and always send `text` regardless, since the backend
+  // simply ignores fields irrelevant to the question type.
   const questions = state.QUESTIONS || [];
-  if (!questions.length) return; // nothing to record against
+  if (!questions.length) {
+    postToApp('LOG', { evt: 'recordScanResponse:no-questions', barcode });
+    return;
+  }
 
   const idx = Math.min(scansLogged, questions.length - 1);
   const q = questions[idx];
+
+  // Build the human-readable response string
+  const responseText = `${barcode} — ${product.product_name || ''} (Nutri-Score: ${(product.nutriscore_grade || '?').toUpperCase()})`;
+
+  // Real duration in seconds (clamped to a reasonable range)
+  const durationSec = scanStartTime
+    ? Math.max(1, Math.min(3600, Math.round((Date.now() - scanStartTime) / 1000)))
+    : 1;
+
   const payload = {
     index: idx,
-    options: [],
-    duration: 0,
-    responseText: `${barcode} — ${product.product_name || ''} (${(product.nutriscore_grade || '?').toUpperCase()})`
+    text: responseText,         // free-text answer — the field Insights reads
+    options: [],                // empty array satisfies the schema for non-option questions
+    duration: durationSec
   };
 
-  // SHORT_TEXT / LONG_TEXT use `text`; we send both for safety
-  if (q && (q.type === 'SHORT_TEXT' || q.type === 'LONG_TEXT')) {
-    payload.text = payload.responseText;
-  }
+  postToApp('LOG', { evt: 'recordScanResponse:submit', idx, qType: q && q.type, durationSec });
   postToApp('QUESTION_RESPONSE', payload);
   scansLogged++;
+  scanStartTime = null;
 }
 
 // ---------- Completion -----------------------------------------------------
