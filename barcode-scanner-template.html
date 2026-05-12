@@ -502,7 +502,11 @@ const bridge = {
   ready: false,
 };
 
-const required = ['ACTIVITY', 'ACTIVITY_RESPONSE', 'QUESTIONS', 'CONFIG'];
+// Only ACTIVITY and QUESTIONS are truly required — without these the template
+// has no context. ACTIVITY_RESPONSE and CONFIG are nice-to-have; we'll proceed
+// with defaults if they don't arrive in time.
+const required = ['ACTIVITY', 'QUESTIONS'];
+const optional = ['ACTIVITY_RESPONSE', 'CONFIG'];
 const received = new Set();
 
 window.addEventListener('message', function(event) {
@@ -528,20 +532,50 @@ function handleHostMessage(msg) {
   }
   if (!bridge.ready && required.every(k => received.has(k))) {
     bridge.ready = true;
+    fillInDefaults();
     initialise();
   }
 }
 
-// Tell the host we're alive, then wait briefly for a response.
-// If none comes (standalone preview, file:// open, etc.) fall back to dev mode.
+// Defaults the template falls back to when CONFIG isn't supplied by the
+// activity's customConfig. This means the template renders sensibly even
+// before a Creator has configured anything.
+function fillInDefaults() {
+  // If customConfig was empty or missing, use the demo config as a fallback
+  // so the template still has languages, translations and swaps to work with.
+  if (!bridge.config || Object.keys(bridge.config).length === 0) {
+    bridge.config = window.DEMO_CONFIG;
+  } else {
+    // Soft-merge: customConfig wins, demo config fills any gaps
+    bridge.config = Object.assign({}, window.DEMO_CONFIG, bridge.config);
+  }
+}
+
+// Tell the host we're alive, then wait for the init messages.
+//   - 600ms with no response at all  → standalone dev mode
+//   - 3000ms with partial response   → proceed with whatever we've got
 window.addEventListener('load', function() {
   postToApp('READY_DYNAMIC_MEDIA', null);
+
+  // Tier 1: nothing at all → standalone
   setTimeout(function() {
     if (!hostResponded && !bridge.ready) {
       document.getElementById('devBanner').style.display = 'block';
       mockHostInit();
     }
-  }, 400);
+  }, 600);
+
+  // Tier 2: host responded but didn't send everything → push on anyway
+  setTimeout(function() {
+    if (hostResponded && !bridge.ready) {
+      // Backfill anything missing with sensible defaults
+      if (!received.has('ACTIVITY')) bridge.activity = { id: 'unknown', customConfig: {} };
+      if (!received.has('QUESTIONS')) bridge.questions = [{ _id: 'q1', type: 'SHORT_TEXT', text: 'Scan' }];
+      bridge.ready = true;
+      fillInDefaults();
+      initialise();
+    }
+  }, 3000);
 });
 
 function mockHostInit() {
@@ -550,7 +584,7 @@ function mockHostInit() {
   bridge.questions = [
     { _id: 'q1', type: 'SHORT_TEXT', text: 'Scan a product' }
   ];
-  bridge.config = window.DEMO_CONFIG;  // see bottom of file
+  bridge.config = window.DEMO_CONFIG;
   bridge.ready = true;
   initialise();
 }
@@ -892,6 +926,97 @@ document.getElementById('btnFinish').onclick = finishSession;
 // ---------- DEMO CONFIG (used in dev mode only) -------------------------
 // In a real Cogniss activity this would arrive via the CONFIG message
 // from activity.customConfig set by the Creator.
+// ---------- OFFLINE FALLBACK PRODUCTS -----------------------------------
+// Used when the Open Food Facts API can't be reached (offline demo,
+// sandboxed preview, blocked CORS). Shape matches the live API exactly.
+window.OFFLINE_PRODUCTS = {
+  '3017620422003': {
+    product_name: 'Nutella',
+    brands: 'Ferrero',
+    nutriscore_grade: 'e',
+    nova_group: 4,
+    nutriments: {
+      'energy-kcal_100g': 539,
+      'sugars_100g': 56.3,
+      'saturated-fat_100g': 10.6,
+      'salt_100g': 0.107,
+      'fiber_100g': 3.4,
+    },
+    categories_tags: ['en:sugary-snacks', 'en:spreads', 'en:sweet-spreads'],
+  },
+  '5449000000996': {
+    product_name: 'Coca-Cola',
+    brands: 'The Coca-Cola Company',
+    nutriscore_grade: 'e',
+    nova_group: 4,
+    nutriments: {
+      'energy-kcal_100g': 42,
+      'sugars_100g': 10.6,
+      'saturated-fat_100g': 0,
+      'salt_100g': 0,
+      'fiber_100g': 0,
+    },
+    categories_tags: ['en:beverages', 'en:sugared-beverages', 'en:carbonated-drinks'],
+  },
+  '7622210449283': {
+    product_name: 'Oreo Original',
+    brands: 'Mondelez',
+    nutriscore_grade: 'e',
+    nova_group: 4,
+    nutriments: {
+      'energy-kcal_100g': 479,
+      'sugars_100g': 38,
+      'saturated-fat_100g': 10,
+      'salt_100g': 0.9,
+      'fiber_100g': 3.6,
+    },
+    categories_tags: ['en:snacks', 'en:sweet-snacks', 'en:biscuits', 'en:sugary-snacks'],
+  },
+  '8076809513753': {
+    product_name: 'Penne Rigate',
+    brands: 'Barilla',
+    nutriscore_grade: 'a',
+    nova_group: 1,
+    nutriments: {
+      'energy-kcal_100g': 353,
+      'sugars_100g': 3.5,
+      'saturated-fat_100g': 0.5,
+      'salt_100g': 0.01,
+      'fiber_100g': 3,
+    },
+    categories_tags: ['en:cereals-and-potatoes', 'en:pastas'],
+  },
+  // Common UK/AU/US store-cupboard items as bonus
+  '5000159484695': {
+    product_name: 'Walkers Ready Salted Crisps',
+    brands: 'Walkers',
+    nutriscore_grade: 'd',
+    nova_group: 4,
+    nutriments: {
+      'energy-kcal_100g': 533,
+      'sugars_100g': 0.6,
+      'saturated-fat_100g': 3.2,
+      'salt_100g': 1.3,
+      'fiber_100g': 4.3,
+    },
+    categories_tags: ['en:snacks', 'en:salty-snacks', 'en:chips-and-fries'],
+  },
+  '5010029217551': {
+    product_name: 'Kellogg\'s Frosties',
+    brands: 'Kellogg\'s',
+    nutriscore_grade: 'd',
+    nova_group: 4,
+    nutriments: {
+      'energy-kcal_100g': 375,
+      'sugars_100g': 37,
+      'saturated-fat_100g': 0.2,
+      'salt_100g': 0.75,
+      'fiber_100g': 2.5,
+    },
+    categories_tags: ['en:breakfasts', 'en:cereals', 'en:breakfast-cereals'],
+  },
+};
+
 window.DEMO_CONFIG = {
   appTitle: 'Pantry<span>·</span>Scan',
   languages: [
