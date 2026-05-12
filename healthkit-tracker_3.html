@@ -719,6 +719,19 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* COLOR SWATCHES */
+  .accent-row {
+    display: flex; gap: 10px; margin-bottom: 16px; justify-content: flex-end;
+  }
+  .accent-swatch {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .accent-swatch.selected { border-color: var(--ink); transform: scale(1.2); }
+
   .clearfix::after { content: ''; display: block; clear: both; }
 </style>
 </head>
@@ -744,6 +757,9 @@
       </div>
       <span class="header-date" id="headerDate">–</span>
     </div>
+
+    <!-- Accent swatches -->
+    <div class="accent-row" id="accentRow"></div>
 
     <!-- App title -->
     <div class="app-title">Healthkit</div>
@@ -988,23 +1004,32 @@ const MOCK = {
 
 let healthData = { ...MOCK }
 
-// ─── App theme ────────────────────────────────────────────────────────────────
-async function applyAppTheme() {
-  try {
-    const appId = state.ACTIVITY_RESPONSE?.app
-    const [appRes, settingsRes] = await Promise.all([
-      appId ? restRequest('get', 'App', appId) : Promise.resolve(null),
-      restRequest('list', 'Settings', {})
-    ])
-    const appTheme      = appRes?.theme || {}
-    const platformTheme = settingsRes?.items?.[0]?.theme || {}
-    const colors = Object.assign({}, platformTheme.colors, appTheme.colors)
-    if (colors.primary) {
-      document.documentElement.style.setProperty('--accent', colors.primary)
-    }
-  } catch (e) {
-    // Fall back to default --accent from CSS
-  }
+// ─── Accent swatches ──────────────────────────────────────────────────────────
+const ACCENTS = [
+  { color: '#2a6fdb', label: 'Blue' },
+  { color: '#1f8a5b', label: 'Green' },
+  { color: '#7a5ae0', label: 'Violet' },
+  { color: '#d97757', label: 'Coral' }
+]
+let currentAccent = '#2a6fdb'
+
+function buildAccentRow() {
+  const row = document.getElementById('accentRow')
+  ACCENTS.forEach(a => {
+    const sw = document.createElement('div')
+    sw.className = 'accent-swatch' + (a.color === currentAccent ? ' selected' : '')
+    sw.style.background = a.color
+    sw.title = a.label
+    sw.addEventListener('click', () => {
+      currentAccent = a.color
+      document.documentElement.style.setProperty('--accent', a.color)
+      row.querySelectorAll('.accent-swatch').forEach(s => s.classList.remove('selected'))
+      sw.classList.add('selected')
+      updateSliderStyle()
+      renderAll()
+    })
+    row.appendChild(sw)
+  })
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1466,7 +1491,8 @@ function handleMessage(msg) {
 }
 
 async function init() {
-  await Promise.all([applyAppTheme(), loadHealthData()])
+  await loadHealthData()
+  buildAccentRow()
   renderAll()
   updateSliderStyle()
 
