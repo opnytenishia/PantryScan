@@ -453,6 +453,12 @@ function renderConfigMissing() {
 // ---------- Screen routing -------------------------------------------------
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  // Start the scan timer when the user lands on the scan screen.
+  // This measures real "time spent looking at the product to scan",
+  // not just the sub-second decode+API window.
+  if (id === 'screen-scan') {
+    scanStartTime = Date.now();
+  }
 }
 
 // ---------- Language picker ------------------------------------------------
@@ -516,7 +522,6 @@ document.getElementById('captureBtnVisible').addEventListener('click', () => {
 document.getElementById('captureInput').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
-  scanStartTime = Date.now();
   setStatus(t('decoding'), false);
   try {
     const barcode = await decodeBarcodeFromFile(file);
@@ -533,7 +538,6 @@ document.getElementById('manualForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const raw = document.getElementById('barcodeInput').value.trim();
   if (!/^\d{8,14}$/.test(raw)) { setStatus(t('invalidBarcode'), true); return; }
-  scanStartTime = Date.now();
   await lookupAndShow(raw);
 });
 
@@ -672,7 +676,7 @@ function pickSwap(categoryTags, grade) {
 // ---------- QUESTION_RESPONSE per scan ------------------------------------
 async function recordScanResponse(barcode, product) {
   // Records one QuestionResponse per scan against question[scansLogged].
-  // The QuestionResponse model accepts: text, option, options, audio, image, duration.
+  // The QuestionResponse model accepts: text, option, options, audio, image, duration, date.
   // For free-text question types we send `text`. The Creator UI exposes the type
   // as TEXT_RESPONSE, but the bridge spec also lists SHORT_TEXT / LONG_TEXT —
   // we accept any of them and always send `text` regardless, since the backend
@@ -689,19 +693,20 @@ async function recordScanResponse(barcode, product) {
   // Build the human-readable response string
   const responseText = `${barcode} — ${product.product_name || ''} (Nutri-Score: ${(product.nutriscore_grade || '?').toUpperCase()})`;
 
-  // Real duration in seconds (clamped to a reasonable range)
-  const durationSec = scanStartTime
-    ? Math.max(1, Math.min(3600, Math.round((Date.now() - scanStartTime) / 1000)))
-    : 1;
+  // Real duration in seconds. Use Math.ceil so any non-zero elapsed time
+  // reads as ≥1 second (avoids the round-to-zero on fast scans).
+  const elapsedMs = scanStartTime ? (Date.now() - scanStartTime) : 0;
+  const durationSec = Math.max(1, Math.min(3600, Math.ceil(elapsedMs / 1000)));
 
   const payload = {
     index: idx,
     text: responseText,         // free-text answer — the field Insights reads
     options: [],                // empty array satisfies the schema for non-option questions
-    duration: durationSec
+    duration: durationSec,      // seconds the user spent on this scan
+    date: new Date().toISOString()  // explicit submission time (writable per QuestionResponse schema)
   };
 
-  postToApp('LOG', { evt: 'recordScanResponse:submit', idx, qType: q && q.type, durationSec });
+  postToApp('LOG', { evt: 'recordScanResponse:submit', idx, qType: q && q.type, elapsedMs, durationSec });
   postToApp('QUESTION_RESPONSE', payload);
   scansLogged++;
   scanStartTime = null;
