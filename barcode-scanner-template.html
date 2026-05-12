@@ -526,7 +526,7 @@ function handleHostMessage(msg) {
     case 'ACTIVITY_RESPONSE':   bridge.activityResponse = msg.data; received.add('ACTIVITY_RESPONSE'); break;
     case 'QUESTIONS':           bridge.questions = msg.data || []; received.add('QUESTIONS'); break;
     case 'QUESTION':            /* not needed — out-of-order template */ break;
-    case 'CONFIG':              bridge.config = msg.data || {}; received.add('CONFIG'); break;
+    case 'CONFIG':              bridge.config = msg.data || {}; received.add('CONFIG'); console.log('[bridge:in] CONFIG payload:', JSON.stringify(msg.data)); break;
     case 'QUESTION_RESPONSE':   /* container ack — no-op for this template */ break;
     case 'REQUEST_RESPONSE':    /* not used in demo */ break;
   }
@@ -549,6 +549,7 @@ function fillInDefaults() {
     // Soft-merge: customConfig wins, demo config fills any gaps
     bridge.config = Object.assign({}, window.DEMO_CONFIG, bridge.config);
   }
+  console.log('[bridge] final config languages:', (bridge.config.languages || []).length, 'entries');
 }
 
 // Tell the host we're alive, then wait for the init messages.
@@ -619,12 +620,13 @@ function initialise() {
 }
 
 function renderLangPicker() {
-  const langs = bridge.config.languages || [
-    { code: 'en', name: 'English', native: 'English' },
-    { code: 'es', name: 'Spanish', native: 'Español' },
-  ];
+  const langs = bridge.config.languages || [];
   const grid = document.getElementById('langGrid');
   grid.innerHTML = '';
+  if (langs.length === 0) {
+    grid.innerHTML = '<p style="color:var(--ink-fade);font-style:italic">No languages configured.</p>';
+    return;
+  }
   langs.forEach(l => {
     const btn = document.createElement('button');
     btn.className = 'lang-btn';
