@@ -118,7 +118,6 @@
   .swap { margin-top: 16px; background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 16px 18px; }
   .swap .label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
   .swap .text { font-family: 'Cormorant Garamond', serif; font-size: 19px; line-height: 1.3; }
-  .swap.thinking .text { font-style: italic; color: var(--ink-soft); }
   .log { margin-top: 20px; }
   .log h3 { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-fade); margin: 0 0 10px; font-weight: normal; }
   .log-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -270,7 +269,6 @@ const STRINGS_EN = {
   cameraUnavailable: 'Camera unavailable',
   useManualEntry: 'use manual entry below.',
   lookingUp: 'looking up',
-  thinking: 'thinking',
   notFound: 'Product not found.',
   networkError: 'Could not reach the food database.',
   unknownProduct: 'Unknown product',
@@ -311,7 +309,12 @@ function renderConfigMissing() {
     i18n: {
       vi: { welcomeTitle: 'Tìm thực phẩm lành mạnh hơn, bằng ngôn ngữ của bạn.' }
     },
-    anthropicApiKey: 'sk-ant-...'
+    swaps: {
+      'sugary-snacks': {
+        en: 'A handful of unsalted almonds gives steady energy without the sugar crash.',
+        vi: 'Một nắm hạnh nhân không muối cho năng lượng ổn định.'
+      }
+    }
   };
   document.getElementById('configExample').textContent = JSON.stringify(example, null, 2);
 }
@@ -390,7 +393,12 @@ async function startCamera() {
     state.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' }, audio: false
     });
-    document.getElementById('video').srcObject = state.stream;
+    const video = document.getElementById('video');
+    video.srcObject = state.stream;
+    // iOS WKWebView occasionally won't autoplay even with the muted+playsinline
+    // attributes; calling play() explicitly is a no-op on Android but required
+    // on iOS for the video element to actually begin rendering frames.
+    try { await video.play(); } catch (e) {}
     state.scanning = true;
     startBarcodeDetection();
   } catch (e) {
@@ -416,8 +424,8 @@ function showCameraFallback(reason) {
 function stopCamera() {
   state.scanning = false;
   if (state.scanner) {
-    if (state.scanner._native) state.scanner._stopped = true;
-    else try { state.scanner.reset(); } catch (e) {}
+    // Both _native and _zxingManual just need their loop flag set
+    state.scanner._stopped = true;
     state.scanner = null;
   }
   if (state.stream) {
@@ -469,15 +477,60 @@ async function runZXingDetector() {
     }
   }
   if (!window.ZXing) return surfaceScannerFailure();
+
   try {
-    const reader = new window.ZXing.BrowserMultiFormatReader();
-    state.scanner = reader;
+    // We manually grab frames from the video element into a canvas and pass
+    // them to ZXing's hint-based reader. This is more reliable than
+    // decodeFromVideoElement, especially on iOS WKWebView which doesn't
+    // always deliver video frames to the library's internal scheduler.
+    const reader = new window.ZXing.MultiFormatReader();
+    const hints = new Map();
+    hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      window.ZXing.BarcodeFormat.EAN_13,
+      window.ZXing.BarcodeFormat.EAN_8,
+      window.ZXing.BarcodeFormat.UPC_A,
+      window.ZXing.BarcodeFormat.UPC_E,
+      window.ZXing.BarcodeFormat.CODE_128,
+      window.ZXing.BarcodeFormat.CODE_39,
+    ]);
+    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+    reader.setHints(hints);
+
+    const video = document.getElementById('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    state.scanner = { _zxingManual: true, _stopped: false, reader };
+
     setStatus(t('pointAtBarcode'));
-    reader.decodeFromVideoElement(document.getElementById('video'), (result) => {
-      if (!state.scanning) return;
-      if (result) { stopCamera(); lookupProduct(result.getText()); }
-    });
-  } catch (e) { surfaceScannerFailure(); }
+
+    const tick = () => {
+      if (!state.scanning || state.scanner._stopped) return;
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        try {
+          const luminanceSource = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
+          const binaryBitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(luminanceSource));
+          const result = reader.decode(binaryBitmap);
+          if (result) {
+            state.scanner._stopped = true;
+            stopCamera();
+            lookupProduct(result.getText());
+            return;
+          }
+        } catch (e) {
+          // NotFoundException is the normal "no barcode visible this frame"
+          // outcome — keep going.
+        }
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  } catch (e) {
+    console.warn('ZXing init failed:', e && e.message);
+    surfaceScannerFailure();
+  }
 }
 
 function surfaceScannerFailure() {
@@ -544,9 +597,9 @@ function renderProduct(barcode, p) {
         ${nutrientRow(t('salt'), n['salt_100g'], 'g / 100g')}
         ${nutrientRow(t('fibre'), n['fiber_100g'], 'g / 100g')}
       </div>
-      <div id="swapHost" class="swap thinking" style="display:none">
+      <div id="swapHost" class="swap" style="display:none">
         <div class="label">${t('swapLabel')}</div>
-        <div class="text">${t('thinking')}</div>
+        <div class="text"></div>
       </div>
     </div>
   `;
@@ -566,58 +619,41 @@ function showError(msg) {
   show('screenError');
 }
 
-// ---------- Swap suggestion via Claude ----------------------------------
-// If customConfig.anthropicApiKey is set, the template asks Claude to write
-// a culturally-appropriate swap suggestion in the user's chosen language.
-// Without a key, the swap card is hidden — we don't fake it.
-async function generateSwap(product) {
-  const key = bridge.config.anthropicApiKey;
+// ---------- Swap suggestion ---------------------------------------------
+// Swap suggestions are configured per-category in customConfig.swaps and
+// looked up by Open Food Facts category tag. No live AI calls.
+function generateSwap(product) {
   const swapHost = document.getElementById('swapHost');
   if (!swapHost) return;
-  if (!key) { swapHost.style.display = 'none'; return; }
+
+  const swap = findSwap(product);
+  if (!swap) { swapHost.style.display = 'none'; return; }
 
   swapHost.style.display = 'block';
+  swapHost.classList.remove('thinking');
+  swapHost.querySelector('.text').textContent = swap;
+}
 
-  const productName = product.product_name || 'this product';
-  const grade = (product.nutriscore_grade || '?').toUpperCase();
-  const nova = product.nova_group || '?';
-  const categories = (product.categories_tags || []).slice(0, 5).join(', ');
-  const lang = state.lang;
-  const languageName = lang.name || lang.code;
+function findSwap(product) {
+  const swapTable = bridge.config.swaps || {};
+  const lang = state.lang && state.lang.code;
+  if (!lang) return null;
 
-  const prompt = `A user just scanned "${productName}" (Nutri-score ${grade}, NOVA processing group ${nova}, categories: ${categories}).
-
-Suggest ONE healthier alternative they could try instead. Be specific and culturally appropriate where possible. Keep it to 1-2 sentences. If the product is already healthy (Nutri-score A or B), say so briefly and skip the swap.
-
-Reply ONLY with the suggestion text — no preamble, no quotation marks, no markdown. Write the entire response in ${languageName} (${lang.code}).`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await res.json();
-    const text = (data.content && data.content[0] && data.content[0].text) || '';
-    if (text) {
-      swapHost.classList.remove('thinking');
-      swapHost.querySelector('.text').textContent = text.trim();
-    } else {
-      swapHost.style.display = 'none';
+  const tags = product.categories_tags || [];
+  for (const tag of tags) {
+    // "en:sugary-snacks" -> "sugary-snacks"
+    const key = tag.replace(/^[a-z]{2}:/, '');
+    if (swapTable[key] && swapTable[key][lang]) {
+      return swapTable[key][lang];
     }
-  } catch (e) {
-    console.warn('Swap generation failed:', e && e.message);
-    swapHost.style.display = 'none';
   }
+
+  // Fall back to a generic message for ultra-processed products
+  const grade = (product.nutriscore_grade || '').toLowerCase();
+  if (grade >= 'd' && swapTable.__generic_unhealthy && swapTable.__generic_unhealthy[lang]) {
+    return swapTable.__generic_unhealthy[lang];
+  }
+  return null;
 }
 
 // ---------- Submitting to Cogniss ---------------------------------------
