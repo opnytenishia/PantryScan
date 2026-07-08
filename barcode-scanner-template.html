@@ -230,6 +230,7 @@
     </div>
 
     <div id="scanStatus" class="status"></div>
+    <div id="diagStrip" style="font-family:ui-monospace,monospace;font-size:10px;color:#8a6a1a;background:#fffbe6;border:1px solid #f5e7c4;padding:6px 10px;margin-top:12px;border-radius:6px;word-break:break-all;line-height:1.4">diag: initialising…</div>
   </section>
 
   <!-- ============ RESULT ============ -->
@@ -349,17 +350,44 @@ const live = {
   zxingReader: null,
 };
 
+// ---------- Diagnostic helper -----------------------------------------------
+const diag = {
+  frames: 0,
+  detects: 0,
+  lastError: null,
+  stage: 'init',
+  detector: 'none',
+  videoSize: '0x0',
+};
+function updateDiag() {
+  const el = document.getElementById('diagStrip');
+  if (!el) return;
+  el.textContent =
+    'stage:' + diag.stage +
+    ' | detector:' + diag.detector +
+    ' | video:' + diag.videoSize +
+    ' | frames:' + diag.frames +
+    ' | detects:' + diag.detects +
+    (diag.lastError ? ' | err:' + diag.lastError : '');
+}
+
 async function startLiveScanning() {
   const container = document.getElementById('liveScanner');
   const video = document.getElementById('liveVideo');
   const statusEl = document.getElementById('liveScanStatus');
 
-  // Reset any prior state
   stopLiveScanning();
   clearStatus();
 
-  // Some environments (no getUserMedia at all) — skip live entirely
+  diag.stage = 'starting';
+  diag.frames = 0;
+  diag.detects = 0;
+  diag.lastError = null;
+  updateDiag();
+
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    diag.stage = 'no-getUserMedia';
+    updateDiag();
     container.style.display = 'none';
     return;
   }
@@ -368,18 +396,25 @@ async function startLiveScanning() {
   statusEl.innerHTML = '<span class="spinner-white"></span>Starting camera…';
 
   try {
+    diag.stage = 'requesting-camera';
+    updateDiag();
     live.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
     });
+    diag.stage = 'stream-acquired';
+    updateDiag();
     video.srcObject = live.stream;
-    try { await video.play(); } catch (e) { /* autoplay may need user gesture, but muted+playsinline usually allow it */ }
+    try { await video.play(); } catch (e) { diag.lastError = 'play:' + (e && e.message); }
+    diag.stage = 'video-playing';
+    updateDiag();
     statusEl.innerHTML = '<span class="spinner-white"></span>Looking for a barcode…';
     live.running = true;
     detectLoop();
   } catch (err) {
-    // Camera unavailable — hide the live view; the "Take a photo instead"
-    // button and manual entry are still on-screen so the user can proceed.
+    diag.stage = 'gum-failed';
+    diag.lastError = err && err.name + ':' + err.message;
+    updateDiag();
     console.warn('Live camera unavailable:', err && err.message);
     container.style.display = 'none';
     setStatus('Camera unavailable — take a photo or enter the barcode manually.', false);
@@ -405,7 +440,6 @@ async function detectLoop() {
   const video = document.getElementById('liveVideo');
   const statusEl = document.getElementById('liveScanStatus');
 
-  // Prepare detector
   let nativeDetector = null;
   if ('BarcodeDetector' in window) {
     try {
@@ -413,32 +447,44 @@ async function detectLoop() {
       const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
         .filter(f => supported.includes(f));
       if (formats.length > 0) nativeDetector = new window.BarcodeDetector({ formats });
-    } catch (e) { /* fall through to ZXing */ }
+    } catch (e) { diag.lastError = 'bd-init:' + (e && e.message); }
   }
 
-  // ZXing setup (only used if native detector isn't available)
   let zxingReader = null;
   let canvas = null, ctx = null;
   if (!nativeDetector && window.ZXingBrowser) {
-    zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
-    canvas = document.createElement('canvas');
-    ctx = canvas.getContext('2d', { willReadFrequently: true });
+    try {
+      zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+      canvas = document.createElement('canvas');
+      ctx = canvas.getContext('2d', { willReadFrequently: true });
+    } catch (e) { diag.lastError = 'zxing-init:' + (e && e.message); }
   }
 
-  // If neither is available, we can't do live scanning at all
   if (!nativeDetector && !zxingReader) {
+    diag.stage = 'no-detector';
+    updateDiag();
     stopLiveScanning();
     setStatus('Barcode scanner not supported on this device. Take a photo or enter the barcode manually.', false);
     return;
   }
 
+  diag.detector = nativeDetector ? 'native' : 'zxing';
+  diag.stage = 'polling';
+  updateDiag();
+
   const tick = async () => {
     if (!live.running) return;
     if (video.readyState >= 2 && video.videoWidth > 0) {
+      diag.videoSize = video.videoWidth + 'x' + video.videoHeight;
+      diag.frames++;
+      if (diag.frames % 15 === 0) updateDiag(); // throttle DOM writes
       try {
         if (nativeDetector) {
           const codes = await nativeDetector.detect(video);
+          diag.detects++;
           if (codes && codes.length > 0) {
+            diag.stage = 'found';
+            updateDiag();
             onDetected(codes[0].rawValue);
             return;
           }
@@ -448,13 +494,16 @@ async function detectLoop() {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           try {
             const result = await zxingReader.decodeFromCanvas(canvas);
+            diag.detects++;
             if (result && result.getText) {
+              diag.stage = 'found';
+              updateDiag();
               onDetected(result.getText());
               return;
             }
           } catch (e) { /* NotFoundException per frame is normal */ }
         }
-      } catch (e) { /* transient — keep polling */ }
+      } catch (e) { diag.lastError = 'detect:' + (e && e.message); }
     }
     live.rafId = requestAnimationFrame(tick);
   };
