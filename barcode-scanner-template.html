@@ -2,757 +2,546 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-<title>Pantry Scan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Food Scanner</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Spectral:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- ZXing browser library — fallback for iOS Safari WebView where BarcodeDetector is absent -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+
 <style>
-  /* ============================================================
-     Pantry Scan — Cogniss External Template
-     Languages, translations, and swap suggestions are driven by
-     activity.customConfig (with English fallbacks for missing
-     strings) or generated live by Claude (for swap text).
-     ============================================================ */
   :root {
-    --bg: #f5f1ea; --ink: #1a1a1a; --ink-soft: #4a4a4a; --ink-fade: #888;
-    --line: #e6dfd2; --paper: #fbf8f2;
-    --accent: #c8553d; --accent-soft: #f4d9d2;
-    --good: #5a7a3e; --good-soft: #e3ebd6;
-    --warn: #c89933; --warn-soft: #f5e7c4;
-    --bad: #a53a2a; --bad-soft: #f0d3ce;
-    --shadow: 0 1px 0 rgba(0,0,0,0.04), 0 8px 24px -12px rgba(50,30,10,0.18);
+    --bg: #faf6f0;
+    --paper: #ffffff;
+    --ink: #2b2a26;
+    --ink-soft: #6b6760;
+    --line: #e6dfd2;
+    --accent: #c5532f;
+    --accent-soft: #f4d9cb;
+    --good: #4a7c59;
+    --bad: #b04525;
+    --shadow: 0 1px 2px rgba(43, 42, 38, 0.04), 0 8px 24px rgba(43, 42, 38, 0.06);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: var(--bg); color: var(--ink);
-    font-family: 'Spectral', Georgia, 'Times New Roman', serif;
-    font-size: 17px; line-height: 1.5; overscroll-behavior: none;
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink); -webkit-font-smoothing: antialiased; overscroll-behavior: contain;
   }
-  body { background-image: radial-gradient(rgba(120,90,40,0.04) 1px, transparent 1px); background-size: 4px 4px; }
-  .app { max-width: 560px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
-  header.bar {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
-    background: var(--bg); position: sticky; top: 0; z-index: 10;
+  .app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+  .screen { flex: 1; display: none; flex-direction: column; padding: 28px 22px 32px; }
+  .screen.active { display: flex; }
+
+  h1, h2 {
+    font-family: 'Cormorant Garamond', serif; font-weight: 600; margin: 0; color: var(--ink);
+    letter-spacing: -0.01em; line-height: 1.15;
   }
-  header.bar .brand { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 22px; letter-spacing: -0.01em; }
-  header.bar .brand span { color: var(--accent); }
-  header.bar .count { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--ink-fade); letter-spacing: 0.08em; text-transform: uppercase; }
-  main { flex: 1; padding: 24px 20px 100px; }
-  .screen { display: none; }
-  .screen.active { display: block; animation: fadeUp 0.35s ease both; }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  .welcome h1 {
-    font-family: 'Cormorant Garamond', Georgia, serif; font-size: 38px; line-height: 1.05;
-    margin: 8px 0 6px; font-weight: 500; letter-spacing: -0.015em;
+  h1 { font-size: 34px; }
+  h2 { font-size: 26px; }
+  .subhead { color: var(--ink-soft); font-size: 15px; line-height: 1.55; margin: 10px 0 0; }
+
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .link-btn {
+    background: none; border: none; color: var(--ink-soft); font-family: inherit; font-size: 13px;
+    cursor: pointer; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px;
   }
-  .welcome .sub { color: var(--ink-soft); font-size: 16px; margin-bottom: 28px; font-style: italic; }
-  .lang-prompt {
-    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px;
-    letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-fade); margin: 0 0 12px;
+  .done-btn {
+    background: none; border: 1px solid var(--line); color: var(--ink); font-family: inherit;
+    font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
   }
-  .lang-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .lang-btn {
-    background: var(--paper); border: 1px solid var(--line);
-    padding: 16px 14px; text-align: left; cursor: pointer;
-    font-family: inherit; font-size: 16px; color: var(--ink);
-    transition: border-color 0.15s, transform 0.1s;
+  .done-btn:hover { border-color: var(--accent); }
+
+  .scan-hero { margin: 8px 0 28px; }
+  .scan-hero .eyebrow {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
+    font-weight: 500; margin-bottom: 10px;
   }
-  .lang-btn:hover { border-color: var(--ink); }
-  .lang-btn:active { transform: scale(0.98); }
-  .lang-btn .native { display: block; font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 500; margin-bottom: 2px; }
-  .lang-btn .english { font-size: 12px; color: var(--ink-fade); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
-  .scanner-wrap {
-    position: relative; background: #1a1a1a; aspect-ratio: 4/3; border-radius: 2px;
-    overflow: hidden; margin-bottom: 16px; box-shadow: var(--shadow);
+
+  .capture-card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 18px;
+    padding: 28px 22px; margin-top: 18px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
   }
-  #video { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .reticule { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
-  .reticule svg { width: 70%; max-width: 280px; opacity: 0.9; }
-  .scanner-status {
-    position: absolute; bottom: 12px; left: 12px; right: 12px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: white;
-    text-align: center; letter-spacing: 0.08em; text-transform: uppercase;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  .icon-camera {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center; color: var(--accent);
   }
-  .scanner-fallback {
-    aspect-ratio: 4/3; background: var(--paper); border: 1px dashed var(--line);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 20px; text-align: center; color: var(--ink-soft); border-radius: 2px; margin-bottom: 16px;
+  .icon-camera svg { width: 32px; height: 32px; }
+
+  .primary-btn, .secondary-btn {
+    font-family: inherit; font-size: 16px; font-weight: 500; padding: 14px 22px;
+    border-radius: 12px; cursor: pointer; width: 100%; text-align: center;
+    transition: opacity 0.12s ease; border: none;
   }
-  .scanner-fallback svg { margin-bottom: 10px; opacity: 0.5; }
-  .action-row { display: flex; gap: 8px; margin-bottom: 14px; }
-  .btn {
-    flex: 1; padding: 14px 16px; font-family: inherit; font-size: 15px;
-    border: 1px solid var(--ink); background: var(--ink); color: var(--bg);
-    cursor: pointer; letter-spacing: 0.01em; transition: transform 0.1s, opacity 0.15s;
+  .primary-btn { background: var(--accent); color: white; }
+  .primary-btn:active { opacity: 0.85; }
+  .secondary-btn { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .secondary-btn:hover { border-color: var(--accent); }
+
+  .file-input-wrap { position: relative; width: 100%; }
+  .file-input-wrap input[type="file"] {
+    position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; cursor: pointer;
   }
-  .btn:active { transform: scale(0.98); }
-  .btn.secondary { background: transparent; color: var(--ink); }
-  .btn.ghost { background: transparent; color: var(--ink-soft); border-color: var(--line); }
-  .btn.accent { background: var(--accent); border-color: var(--accent); color: white; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .manual-entry { display: flex; gap: 8px; margin-top: 8px; }
-  .manual-entry input {
-    flex: 1; padding: 12px 14px; font-family: 'JetBrains Mono', monospace;
-    font-size: 15px; background: var(--paper); border: 1px solid var(--line);
-    color: var(--ink); letter-spacing: 0.04em;
+
+  .divider {
+    display: flex; align-items: center; gap: 12px; color: var(--ink-soft); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.15em; width: 100%;
   }
-  .manual-entry input:focus { outline: none; border-color: var(--ink); }
-  .product { background: var(--paper); border: 1px solid var(--line); padding: 22px 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
-  .product .barcode { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-fade); letter-spacing: 0.08em; margin-bottom: 8px; }
-  .product .name { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 500; line-height: 1.15; margin-bottom: 4px; letter-spacing: -0.01em; }
-  .product .brand-line { color: var(--ink-soft); font-style: italic; margin-bottom: 16px; font-size: 14px; }
-  .grade-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
-  .badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 9px; background: var(--line); color: var(--ink); }
-  .badge.good { background: var(--good-soft); color: var(--good); }
-  .badge.warn { background: var(--warn-soft); color: #8a6a1a; }
-  .badge.bad  { background: var(--bad-soft);  color: var(--bad);  }
-  .nutrients { border-top: 1px solid var(--line); padding-top: 14px; }
-  .nutri-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted var(--line); font-size: 15px; }
-  .nutri-row:last-child { border-bottom: none; }
-  .nutri-row .label { color: var(--ink-soft); }
-  .nutri-row .value { font-family: 'JetBrains Mono', monospace; font-size: 14px; }
-  .swap { margin-top: 16px; background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 16px 18px; }
-  .swap .label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
-  .swap .text { font-family: 'Cormorant Garamond', serif; font-size: 19px; line-height: 1.3; }
-  .log { margin-top: 20px; }
-  .log h3 { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-fade); margin: 0 0 10px; font-weight: normal; }
-  .log-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .log-item .nm { color: var(--ink); }
-  .log-item .gr { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-fade); }
-  .loading, .error { text-align: center; padding: 40px 20px; color: var(--ink-soft); }
-  .loading .dots { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 20px; letter-spacing: 0.2em; }
-  .loading .dots::after { content: '.'; animation: dots 1.4s steps(4, end) infinite; }
-  @keyframes dots { 0%,20% { content: '.'; } 40% { content: '..'; } 60%,100% { content: '...'; } }
-  .error .icon { font-size: 28px; margin-bottom: 8px; }
-  .done-row { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
-  .config-missing { background: var(--paper); border: 1px dashed var(--accent); padding: 24px 20px; margin-top: 12px; }
-  .config-missing h2 { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 500; margin: 0 0 10px; }
-  .config-missing pre {
-    background: #fdfaf3; border: 1px solid var(--line); padding: 12px 14px;
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5;
-    overflow-x: auto; margin: 10px 0 0; white-space: pre;
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  .manual-form { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .manual-form input {
+    font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: 16px; padding: 14px 16px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink);
+    -webkit-appearance: none; width: 100%;
   }
+  .manual-form input:focus { outline: none; border-color: var(--accent); background: var(--paper); }
+
+  .status {
+    margin-top: 22px; padding: 16px 18px; background: var(--paper); border: 1px solid var(--line);
+    border-radius: 12px; font-size: 14px; color: var(--ink-soft);
+    display: none; align-items: center; gap: 12px;
+  }
+  .status.error { border-color: var(--bad); color: var(--bad); }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result-card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 18px;
+    overflow: hidden; box-shadow: var(--shadow); margin-top: 18px;
+  }
+  .product-head { padding: 22px 22px 18px; border-bottom: 1px solid var(--line); }
+  .product-brand { font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-soft); }
+  .product-name {
+    font-family: 'Cormorant Garamond', serif; font-size: 26px; line-height: 1.2;
+    margin-top: 6px; font-weight: 600;
+  }
+  .nutri { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .nutri-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%; color: white; font-weight: 600; font-size: 16px;
+  }
+  .nutri-badge.a { background: #038141; }
+  .nutri-badge.b { background: #85bb2f; }
+  .nutri-badge.c { background: #fecb02; color: #2b2a26; }
+  .nutri-badge.d { background: #ee8100; }
+  .nutri-badge.e { background: #e63e11; }
+  .nutri-badge.unknown { background: var(--ink-soft); }
+  .nutri-label { font-size: 13px; color: var(--ink-soft); }
+
+  .nutrition-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); padding: 16px 0;
+    border-bottom: 1px solid var(--line); background: var(--bg);
+  }
+  .nutrition-strip > div { text-align: center; padding: 4px 6px; }
+  .nutrition-strip > div + div { border-left: 1px solid var(--line); }
+  .nutrition-strip .v { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; }
+  .nutrition-strip .l {
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); margin-top: 2px;
+  }
+
+  .swap-block { padding: 22px; }
+  .swap-eyebrow {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
+    font-weight: 500; margin-bottom: 10px;
+  }
+  .swap-body {
+    font-family: 'Cormorant Garamond', serif; font-size: 22px; font-style: italic;
+    line-height: 1.4; color: var(--ink);
+  }
+
+  .scan-again-row { display: flex; gap: 12px; margin-top: 22px; }
+  .scan-again-row > button { flex: 1; }
+
+  .done-summary { text-align: center; margin: 40px 0; }
+  .done-summary .check {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--good);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; color: white;
+  }
+  .scans-counter { font-size: 14px; color: var(--ink-soft); margin-top: 10px; }
 </style>
 </head>
 <body>
-<div style="background:red;color:white;padding:14px;text-align:center;font-size:20px;font-weight:bold;font-family:sans-serif">VERSION 6 — IF YOU SEE THIS THE NEW FILE LOADED</div>
+
 <div class="app">
-  <header class="bar">
-    <div class="brand">Pantry<span>·</span>Scan</div>
-    <div class="count" id="scanCount">0 scans</div>
-  </header>
-  <div id="diagStrip" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#666;background:#f0eadb;padding:4px 8px;border-bottom:1px solid var(--line);word-break:break-all;line-height:1.4">bridge: (waiting…)</div>
-  <main>
-    <section id="screenWelcome" class="screen welcome">
-      <h1 id="welcomeTitle">Find healthier food, in your language.</h1>
-      <p class="sub" id="welcomeSub">Scan any product. We'll translate the label and suggest a better swap.</p>
-      <p class="lang-prompt" id="langPrompt">Choose your language</p>
-      <div class="lang-grid" id="langGrid"></div>
-    </section>
-    <section id="screenConfigMissing" class="screen">
-      <div class="config-missing">
-        <h2>Activity needs configuration</h2>
-        <p>This template needs <code>customConfig</code> set on the activity in Creator. At minimum it needs a list of languages. Optional fields cover UI translations and an Anthropic API key for live swap suggestions.</p>
-        <p>Paste this into the Activity's Custom Config field to get started:</p>
-        <pre id="configExample"></pre>
+
+  <!-- ============ SCAN / CAPTURE ============ -->
+  <section id="screen-scan" class="screen active">
+    <div class="top-bar">
+      <span></span>
+      <button class="done-btn" id="doneBtn">Done</button>
+    </div>
+
+    <div class="scan-hero">
+      <div class="eyebrow">Scan a barcode</div>
+      <h1>Find healthier food.</h1>
+      <p class="subhead">Take a photo of any product barcode. We'll show the nutrition and suggest a better swap.</p>
+    </div>
+
+    <div class="capture-card">
+      <div class="icon-camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
       </div>
-    </section>
-    <section id="screenScan" class="screen">
-      <div id="scannerHost"></div>
-      <div class="action-row">
-        <button id="btnStartCam" class="btn">Scan barcode</button>
-        <button id="btnManual" class="btn secondary">Enter code</button>
+      <div class="file-input-wrap">
+        <button class="primary-btn" id="captureBtnVisible" type="button">Take photo</button>
+        <input type="file" id="captureInput" accept="image/*" capture="environment">
       </div>
-      <div id="manualEntry" class="manual-entry" style="display:none">
-        <input id="manualInput" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 3017620422003" maxlength="14">
-        <button id="btnLookup" class="btn">Look up</button>
+
+      <div class="divider"><span>or</span></div>
+
+      <form class="manual-form" id="manualForm">
+        <input type="text" id="barcodeInput" inputmode="numeric" pattern="[0-9]*" placeholder="Enter barcode (e.g. 3017620422003)" maxlength="14">
+        <button class="secondary-btn" type="submit">Look up</button>
+      </form>
+    </div>
+
+    <div id="scanStatus" class="status"></div>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section id="screen-result" class="screen">
+    <div class="top-bar">
+      <button class="link-btn" id="resultBackBtn">← back</button>
+      <button class="done-btn" id="doneBtn2">Done</button>
+    </div>
+
+    <div class="result-card">
+      <div class="product-head">
+        <div class="product-brand" id="productBrand"></div>
+        <div class="product-name" id="productName"></div>
+        <div class="nutri" id="nutriRow"></div>
       </div>
-      <div class="log" id="logSection" style="display:none">
-        <h3 id="logTitle">Today's scans</h3>
-        <div id="logList"></div>
+      <div class="nutrition-strip" id="nutritionStrip"></div>
+      <div class="swap-block">
+        <div class="swap-eyebrow">Healthier swap</div>
+        <div class="swap-body" id="swapBody"></div>
       </div>
-      <div class="done-row">
-        <button id="btnFinish" class="btn ghost">Finish session</button>
+    </div>
+
+    <div class="scan-again-row">
+      <button class="secondary-btn" id="scanAgainBtn">Scan another</button>
+    </div>
+  </section>
+
+  <!-- ============ DONE ============ -->
+  <section id="screen-done" class="screen">
+    <div class="done-summary">
+      <div class="check">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-    </section>
-    <section id="screenProduct" class="screen">
-      <div id="productHost"></div>
-      <div class="action-row" style="margin-top:16px">
-        <button id="btnScanAnother" class="btn accent">Scan another</button>
-      </div>
-    </section>
-    <section id="screenLoading" class="screen">
-      <div class="loading"><div class="dots">scanning</div></div>
-    </section>
-    <section id="screenError" class="screen">
-      <div class="error">
-        <div class="icon">⌀</div>
-        <p id="errorMsg">Product not found.</p>
-        <button class="btn secondary" id="btnErrBack" style="max-width:200px;margin-top:14px">Try again</button>
-      </div>
-    </section>
-  </main>
+      <h2>All done</h2>
+      <p class="subhead">Thanks for scanning today.</p>
+      <p class="scans-counter" id="scansCounter"></p>
+    </div>
+  </section>
+
 </div>
 
 <script>
-/* ============================================================
-   Pantry Scan — main script
-   ============================================================ */
+// ============================================================================
+// Cogniss External Template: Barcode Food Scanner
+// English only. Photo-capture (iOS-compatible). Per-scan QUESTION_RESPONSE.
+// ============================================================================
 
-// ---------- Bridge -------------------------------------------------------
-// Detect available outbound channels. Different mobile container
-// implementations expose different globals; we try all of them.
-function detectChannels() {
-  const channels = [];
-  if (typeof window.ReactNativeWebView !== 'undefined' && window.ReactNativeWebView.postMessage) channels.push('ReactNativeWebView');
-  if (window.webkit && window.webkit.messageHandlers) {
-    Object.keys(window.webkit.messageHandlers).forEach(k => channels.push('webkit.' + k));
-  }
-  if (typeof window.Android !== 'undefined') channels.push('Android');
-  if (typeof window.cogniss !== 'undefined') channels.push('cogniss');
-  if (window.parent && window.parent !== window) channels.push('parent');
-  return channels;
-}
+// ---------- Bridge -----------------------------------------------------------
+const isNative = typeof window.ReactNativeWebView !== 'undefined';
 
 function postToApp(key, data) {
-  const text = JSON.stringify({ key, data });
-  let posted = false;
-
-  if (typeof window.ReactNativeWebView !== 'undefined' && window.ReactNativeWebView.postMessage) {
-    try { window.ReactNativeWebView.postMessage(text); posted = true; } catch (e) {}
-  }
-  if (window.webkit && window.webkit.messageHandlers) {
-    // Try every available message handler; the host will ignore the wrong ones
-    Object.keys(window.webkit.messageHandlers).forEach(handlerName => {
-      try { window.webkit.messageHandlers[handlerName].postMessage(text); posted = true; } catch (e) {}
-    });
-  }
-  if (typeof window.Android !== 'undefined' && typeof window.Android.postMessage === 'function') {
-    try { window.Android.postMessage(text); posted = true; } catch (e) {}
-  }
-  if (window.parent && window.parent !== window) {
-    try { window.parent.postMessage(text, '*'); posted = true; } catch (e) {}
-  }
-  console.log('[bridge:out]', key, 'posted:', posted);
-  return posted;
-}
-
-const bridge = {
-  api: null, auth: null, user: null,
-  activity: null, activityResponse: null,
-  questions: null, config: {}, ready: false,
-};
-
-window.addEventListener('message', function(event) {
-  let msg;
-  try { msg = JSON.parse(event.data); } catch (e) { return; }
-  if (!msg || !msg.key) return;
-  handleHostMessage(msg);
-});
-
-function handleHostMessage(msg) {
-  switch (msg.key) {
-    case 'API':               bridge.api = msg.data; break;
-    case 'AUTH':              bridge.auth = msg.data; break;
-    case 'USER':              bridge.user = msg.data; break;
-    case 'ACTIVITY':          bridge.activity = msg.data; break;
-    case 'ACTIVITY_RESPONSE': bridge.activityResponse = msg.data; break;
-    case 'QUESTIONS':         bridge.questions = msg.data || []; break;
-    case 'CONFIG':            bridge.config = msg.data || {}; break;
-  }
-  updateDiagnostic(msg.key);
-  // Need ACTIVITY + QUESTIONS at minimum. CONFIG commonly arrives as {}.
-  if (!bridge.ready && bridge.activity && bridge.questions !== null) {
-    bridge.ready = true;
-    setTimeout(initialise, 100); // let trailing messages arrive
+  const text = JSON.stringify({ key, data: data === undefined ? null : data });
+  if (isNative) {
+    window.ReactNativeWebView.postMessage(text);
+  } else if (window.parent && window.parent !== window) {
+    window.parent.postMessage(text, '*');
   }
 }
 
-// ---------- Diagnostic (temporary) --------------------------------------
-const diag = { received: [], channels: [], posted: null };
-function updateDiagnostic(key) {
-  diag.received.push(key);
-  renderDiag();
+const bridge = {};
+const REQUIRED = ['ACTIVITY', 'QUESTIONS'];
+let initialised = false;
+let didQuit = false;
+
+function onMessage(event) {
+  try {
+    const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+    if (!message || !message.key) return;
+    bridge[message.key] = message.data;
+    if (!initialised && REQUIRED.every(k => bridge[k] !== undefined)) {
+      initialised = true;
+      // Small delay to allow trailing init messages (CONFIG etc.) to arrive
+      setTimeout(initialise, 100);
+    }
+  } catch (e) { /* ignore malformed messages */ }
 }
-function renderDiag() {
-  const el = document.getElementById('diagStrip');
-  if (!el) return;
-  el.textContent =
-    'channels: ' + (diag.channels.length ? diag.channels.join(',') : 'NONE') +
-    ' | ready posted: ' + (diag.posted === null ? 'pending' : diag.posted ? 'yes' : 'no') +
-    ' | received: ' + (diag.received.length ? diag.received.join(' · ') : '(nothing)') +
-    ' | activity:' + (bridge.activity ? 'Y' : 'N') +
-    ' | questions:' + (bridge.questions !== null ? bridge.questions.length : 'null') +
-    ' | config keys:' + Object.keys(bridge.config || {}).length;
-}
+document.addEventListener('message', onMessage); // Android RN
+window.addEventListener('message', onMessage);   // iOS RN + web
 
 window.addEventListener('load', function() {
-  diag.channels = detectChannels();
-  diag.posted = postToApp('READY_DYNAMIC_MEDIA', null);
-  renderDiag();
-  setTimeout(function() {
-    if (!bridge.ready) {
-      const el = document.getElementById('diagStrip');
-      if (el) el.textContent += ' | STUCK';
-    }
-  }, 8000);
+  postToApp('READY_DYNAMIC_MEDIA');
 });
 
-// ---------- State --------------------------------------------------------
-const state = { lang: null, scans: [], scanning: false, stream: null, scanner: null };
+// ---------- State ------------------------------------------------------------
+let scansLogged = 0;
+let zxingReader = null;
+let scanStartTime = Date.now();
 
-// ---------- i18n ---------------------------------------------------------
-// All user-facing strings have an English source-of-truth here. The customer
-// supplies translations via customConfig.i18n[langCode][key]. Missing keys
-// fall back to the English string. No other language is hardcoded.
-const STRINGS_EN = {
-  welcomeTitle: 'Find healthier food, in your language.',
-  welcomeSub: "Scan any product. We'll translate the label and suggest a better swap.",
-  langPrompt: 'Choose your language',
-  scanBarcode: 'Scan barcode',
-  enterCode: 'Enter code',
-  lookup: 'Look up',
-  scanAnother: 'Scan another',
-  finishSession: 'Finish session',
-  todaysScans: "Today's scans",
-  aligning: 'Aligning camera…',
-  pointAtBarcode: 'Point at a barcode',
-  loadingScanner: 'Loading scanner library…',
-  scannerLoadFailed: 'Scanner unavailable — use manual entry',
-  cameraUnavailable: 'Camera unavailable',
-  useManualEntry: 'use manual entry below.',
-  lookingUp: 'looking up',
-  notFound: 'Product not found.',
-  networkError: 'Could not reach the food database.',
-  unknownProduct: 'Unknown product',
-  nutriscore: 'Nutri-score',
-  nova: 'NOVA',
-  energy: 'Energy',
-  sugars: 'Sugars',
-  saturated: 'Saturated fat',
-  salt: 'Salt',
-  fibre: 'Fibre',
-  swapLabel: 'Try this instead',
-};
-
-function t(key) {
-  const code = state.lang && state.lang.code;
-  const dict = (bridge.config.i18n && code && bridge.config.i18n[code]) || {};
-  return dict[key] || STRINGS_EN[key] || key;
-}
-
-// ---------- Initialisation ----------------------------------------------
+// ---------- Init -------------------------------------------------------------
 function initialise() {
-  const langs = bridge.config.languages;
-  if (!langs || !Array.isArray(langs) || langs.length === 0) {
-    renderConfigMissing();
-    show('screenConfigMissing');
-    return;
-  }
-  renderLangPicker(langs);
-  show('screenWelcome');
+  scanStartTime = Date.now();
+  // Scan screen is already .active in the markup; no-op required, but if we
+  // ever add gating logic we'd do it here.
 }
 
-function renderConfigMissing() {
-  const example = {
-    languages: [
-      { code: 'en', name: 'English', native: 'English' },
-      { code: 'vi', name: 'Vietnamese', native: 'Tiếng Việt' }
-    ],
-    i18n: {
-      vi: { welcomeTitle: 'Tìm thực phẩm lành mạnh hơn, bằng ngôn ngữ của bạn.' }
-    },
-    swaps: {
-      'sugary-snacks': {
-        en: 'A handful of unsalted almonds gives steady energy without the sugar crash.',
-        vi: 'Một nắm hạnh nhân không muối cho năng lượng ổn định.'
-      }
-    }
-  };
-  document.getElementById('configExample').textContent = JSON.stringify(example, null, 2);
+// ---------- Screen routing ---------------------------------------------------
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  if (id === 'screen-scan') scanStartTime = Date.now();
 }
 
-function renderLangPicker(langs) {
-  const grid = document.getElementById('langGrid');
-  grid.innerHTML = '';
-  langs.forEach(l => {
-    const btn = document.createElement('button');
-    btn.className = 'lang-btn';
-    btn.innerHTML = `<span class="native">${escapeHtml(l.native || l.name || l.code)}</span><span class="english">${escapeHtml(l.name || '')}</span>`;
-    btn.onclick = () => chooseLanguage(l);
-    grid.appendChild(btn);
-  });
-  // Show the welcome headline in the first configured language as a teaser.
-  if (langs[0]) {
-    const prev = state.lang;
-    state.lang = langs[0];
-    document.getElementById('welcomeTitle').textContent = t('welcomeTitle');
-    document.getElementById('welcomeSub').textContent = t('welcomeSub');
-    document.getElementById('langPrompt').textContent = t('langPrompt');
-    state.lang = prev;
-  }
-}
+// ---------- Capture handlers -------------------------------------------------
+document.getElementById('captureBtnVisible').addEventListener('click', () => {
+  document.getElementById('captureInput').click();
+});
 
-function chooseLanguage(lang) {
-  state.lang = lang;
-  document.getElementById('btnStartCam').textContent = t('scanBarcode');
-  document.getElementById('btnManual').textContent = t('enterCode');
-  document.getElementById('btnLookup').textContent = t('lookup');
-  document.getElementById('btnScanAnother').textContent = t('scanAnother');
-  document.getElementById('btnFinish').textContent = t('finishSession');
-  document.getElementById('logTitle').textContent = t('todaysScans');
-  show('screenScan');
-}
-
-// ---------- Screen navigation -------------------------------------------
-function show(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
-function updateScanCount() {
-  document.getElementById('scanCount').textContent =
-    state.scans.length + ' ' + (state.scans.length === 1 ? 'scan' : 'scans');
-  if (state.scans.length > 0) {
-    document.getElementById('logSection').style.display = 'block';
-    document.getElementById('logList').innerHTML = state.scans.slice().reverse().map(s =>
-      `<div class="log-item"><span class="nm">${escapeHtml(s.name)}</span><span class="gr">${(s.grade || '?').toUpperCase()}</span></div>`
-    ).join('');
-  }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-}
-
-// ---------- Camera + barcode detection ----------------------------------
-async function startCamera() {
-  document.getElementById('scannerHost').innerHTML = `
-    <div class="scanner-wrap">
-      <video id="video" autoplay playsinline muted></video>
-      <div class="reticule">
-        <svg viewBox="0 0 280 140" fill="none">
-          <path d="M10 10 L10 40 M10 10 L40 10" stroke="#fff" stroke-width="2"/>
-          <path d="M270 10 L270 40 M270 10 L240 10" stroke="#fff" stroke-width="2"/>
-          <path d="M10 130 L10 100 M10 130 L40 130" stroke="#fff" stroke-width="2"/>
-          <path d="M270 130 L270 100 M270 130 L240 130" stroke="#fff" stroke-width="2"/>
-          <line x1="20" y1="70" x2="260" y2="70" stroke="${getCssVar('--accent')}" stroke-width="1" opacity="0.7"/>
-        </svg>
-      </div>
-      <div class="scanner-status">${t('aligning')}</div>
-    </div>
-  `;
+document.getElementById('captureInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  setStatus('Reading the barcode…', false);
   try {
-    state.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }, audio: false
-    });
-    const video = document.getElementById('video');
-    video.srcObject = state.stream;
-    // iOS WKWebView occasionally won't autoplay even with the muted+playsinline
-    // attributes; calling play() explicitly is a no-op on Android but required
-    // on iOS for the video element to actually begin rendering frames.
-    try { await video.play(); } catch (e) {}
-    state.scanning = true;
-    startBarcodeDetection();
-  } catch (e) {
-    showCameraFallback(e.message || 'Camera unavailable');
-  }
-}
-
-function showCameraFallback(reason) {
-  document.getElementById('scannerHost').innerHTML = `
-    <div class="scanner-fallback">
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-        <rect x="3" y="6" width="18" height="13" rx="1"/>
-        <circle cx="12" cy="12.5" r="3.5"/>
-      </svg>
-      <strong>${t('cameraUnavailable')}</strong>
-      <small style="margin-top:6px">${escapeHtml(reason)} — ${t('useManualEntry')}</small>
-    </div>
-  `;
-  document.getElementById('manualEntry').style.display = 'flex';
-  document.getElementById('manualInput').focus();
-}
-
-function stopCamera() {
-  state.scanning = false;
-  if (state.scanner) {
-    // Both _native and _zxingManual just need their loop flag set
-    state.scanner._stopped = true;
-    state.scanner = null;
-  }
-  if (state.stream) {
-    state.stream.getTracks().forEach(t => t.stop());
-    state.stream = null;
-  }
-}
-
-async function startBarcodeDetection() {
-  setStatus(t('pointAtBarcode'));
-  if ('BarcodeDetector' in window) {
-    try {
-      const supported = await BarcodeDetector.getSupportedFormats();
-      const formats = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']
-        .filter(f => supported.includes(f));
-      if (formats.length > 0) return runNativeDetector(formats);
-    } catch (e) {}
-  }
-  return runZXingDetector();
-}
-
-async function runNativeDetector(formats) {
-  const detector = new BarcodeDetector({ formats });
-  const video = document.getElementById('video');
-  state.scanner = { _native: true, _stopped: false };
-  const tick = async () => {
-    if (!state.scanning || state.scanner._stopped) return;
-    try {
-      const codes = await detector.detect(video);
-      if (codes && codes.length > 0) {
-        state.scanner._stopped = true;
-        stopCamera();
-        lookupProduct(codes[0].rawValue);
-        return;
-      }
-    } catch (e) {}
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-}
-
-async function runZXingDetector() {
-  setStatus(t('loadingScanner'));
-  if (!window.ZXing) {
-    try { await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'); }
-    catch (e) {
-      try { await loadScript('https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js'); }
-      catch (e2) { return surfaceScannerFailure(); }
-    }
-  }
-  if (!window.ZXing) return surfaceScannerFailure();
-
-  try {
-    // We manually grab frames from the video element into a canvas and pass
-    // them to ZXing's hint-based reader. This is more reliable than
-    // decodeFromVideoElement, especially on iOS WKWebView which doesn't
-    // always deliver video frames to the library's internal scheduler.
-    const reader = new window.ZXing.MultiFormatReader();
-    const hints = new Map();
-    hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      window.ZXing.BarcodeFormat.EAN_13,
-      window.ZXing.BarcodeFormat.EAN_8,
-      window.ZXing.BarcodeFormat.UPC_A,
-      window.ZXing.BarcodeFormat.UPC_E,
-      window.ZXing.BarcodeFormat.CODE_128,
-      window.ZXing.BarcodeFormat.CODE_39,
-    ]);
-    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
-    reader.setHints(hints);
-
-    const video = document.getElementById('video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    state.scanner = { _zxingManual: true, _stopped: false, reader };
-
-    setStatus(t('pointAtBarcode'));
-
-    const tick = () => {
-      if (!state.scanning || state.scanner._stopped) return;
-      if (video.readyState >= 2 && video.videoWidth > 0) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        try {
-          const luminanceSource = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
-          const binaryBitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(luminanceSource));
-          const result = reader.decode(binaryBitmap);
-          if (result) {
-            state.scanner._stopped = true;
-            stopCamera();
-            lookupProduct(result.getText());
-            return;
-          }
-        } catch (e) {
-          // NotFoundException is the normal "no barcode visible this frame"
-          // outcome — keep going.
-        }
-      }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  } catch (e) {
-    console.warn('ZXing init failed:', e && e.message);
-    surfaceScannerFailure();
-  }
-}
-
-function surfaceScannerFailure() {
-  setStatus(t('scannerLoadFailed'));
-  document.getElementById('manualEntry').style.display = 'flex';
-}
-
-function setStatus(text) {
-  const el = document.querySelector('.scanner-status');
-  if (el) el.textContent = text;
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src; s.async = true;
-    s.onload = resolve; s.onerror = () => reject(new Error('script load failed'));
-    document.head.appendChild(s);
-  });
-}
-
-function getCssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-// ---------- Product lookup ----------------------------------------------
-async function lookupProduct(barcode) {
-  show('screenLoading');
-  document.querySelector('#screenLoading .dots').textContent = t('lookingUp');
-  try {
-    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,nutriscore_grade,nova_group,nutriments,categories_tags`);
-    const data = await r.json();
-    if (data.status === 1 && data.product) {
-      renderProduct(barcode, data.product);
-      submitScan(barcode, data.product);
-      generateSwap(data.product);
+    const barcode = await decodeBarcodeFromFile(file);
+    if (!barcode) {
+      setStatus('Could not read a barcode from that photo. Try again or enter the number.', true);
       return;
     }
-    return showError(t('notFound'));
-  } catch (e) {
-    return showError(t('networkError') + ' (' + (e.message || 'fetch failed') + ')');
+    await lookupAndShow(barcode);
+  } catch (err) {
+    setStatus('Could not read a barcode from that photo. Try again or enter the number.', true);
+  } finally {
+    e.target.value = ''; // allow re-pick of same file
   }
-}
+});
 
-function renderProduct(barcode, p) {
-  const name = p.product_name || t('unknownProduct');
-  const brand = p.brands || '';
-  const grade = (p.nutriscore_grade || '').toLowerCase();
-  const nova = p.nova_group;
-  const n = p.nutriments || {};
-  document.getElementById('productHost').innerHTML = `
-    <div class="product">
-      <div class="barcode">${escapeHtml(barcode)}</div>
-      <div class="name">${escapeHtml(name)}</div>
-      ${brand ? `<div class="brand-line">${escapeHtml(brand)}</div>` : ''}
-      <div class="grade-row">
-        ${grade ? `<span class="badge ${gradeClass(grade)}">${t('nutriscore')} ${grade.toUpperCase()}</span>` : ''}
-        ${nova ? `<span class="badge ${novaClass(nova)}">${t('nova')} ${nova}</span>` : ''}
-      </div>
-      <div class="nutrients">
-        ${nutrientRow(t('energy'), n['energy-kcal_100g'], 'kcal / 100g')}
-        ${nutrientRow(t('sugars'), n['sugars_100g'], 'g / 100g')}
-        ${nutrientRow(t('saturated'), n['saturated-fat_100g'], 'g / 100g')}
-        ${nutrientRow(t('salt'), n['salt_100g'], 'g / 100g')}
-        ${nutrientRow(t('fibre'), n['fiber_100g'], 'g / 100g')}
-      </div>
-      <div id="swapHost" class="swap" style="display:none">
-        <div class="label">${t('swapLabel')}</div>
-        <div class="text"></div>
-      </div>
-    </div>
-  `;
-  show('screenProduct');
-}
-
-function nutrientRow(label, val, unit) {
-  if (val === undefined || val === null) return '';
-  return `<div class="nutri-row"><span class="label">${label}</span><span class="value">${Number(val).toFixed(1)} ${unit}</span></div>`;
-}
-
-function gradeClass(g) { return (g === 'a' || g === 'b') ? 'good' : g === 'c' ? 'warn' : 'bad'; }
-function novaClass(n) { return n <= 2 ? 'good' : n === 3 ? 'warn' : 'bad'; }
-
-function showError(msg) {
-  document.getElementById('errorMsg').textContent = msg;
-  show('screenError');
-}
-
-// ---------- Swap suggestion ---------------------------------------------
-// Swap suggestions are configured per-category in customConfig.swaps and
-// looked up by Open Food Facts category tag. No live AI calls.
-function generateSwap(product) {
-  const swapHost = document.getElementById('swapHost');
-  if (!swapHost) return;
-
-  const swap = findSwap(product);
-  if (!swap) { swapHost.style.display = 'none'; return; }
-
-  swapHost.style.display = 'block';
-  swapHost.classList.remove('thinking');
-  swapHost.querySelector('.text').textContent = swap;
-}
-
-function findSwap(product) {
-  const swapTable = bridge.config.swaps || {};
-  const lang = state.lang && state.lang.code;
-  if (!lang) return null;
-
-  const tags = product.categories_tags || [];
-  for (const tag of tags) {
-    // "en:sugary-snacks" -> "sugary-snacks"
-    const key = tag.replace(/^[a-z]{2}:/, '');
-    if (swapTable[key] && swapTable[key][lang]) {
-      return swapTable[key][lang];
-    }
+document.getElementById('manualForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const raw = document.getElementById('barcodeInput').value.trim();
+  if (!/^\d{8,14}$/.test(raw)) {
+    setStatus('Please enter a valid barcode (8–14 digits).', true);
+    return;
   }
+  await lookupAndShow(raw);
+});
 
-  // Fall back to a generic message for ultra-processed products
-  const grade = (product.nutriscore_grade || '').toLowerCase();
-  if (grade >= 'd' && swapTable.__generic_unhealthy && swapTable.__generic_unhealthy[lang]) {
-    return swapTable.__generic_unhealthy[lang];
+document.getElementById('resultBackBtn').addEventListener('click', () => {
+  clearStatus();
+  showScreen('screen-scan');
+});
+
+document.getElementById('scanAgainBtn').addEventListener('click', () => {
+  clearStatus();
+  document.getElementById('barcodeInput').value = '';
+  showScreen('screen-scan');
+});
+
+document.getElementById('doneBtn').addEventListener('click', completeActivity);
+document.getElementById('doneBtn2').addEventListener('click', completeActivity);
+
+// ---------- Barcode decoding -------------------------------------------------
+async function decodeBarcodeFromFile(file) {
+  // Try native BarcodeDetector first (fast, no library, works on Android Chromium)
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128']
+      });
+      const bitmap = await createImageBitmap(file);
+      const results = await detector.detect(bitmap);
+      if (results && results.length > 0) return results[0].rawValue;
+    } catch (e) { /* fall through */ }
+  }
+  // Fallback: @zxing/browser (iOS Safari WebView, Firefox, older browsers)
+  if (window.ZXingBrowser) {
+    try {
+      if (!zxingReader) zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+      const url = URL.createObjectURL(file);
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = url;
+      });
+      try {
+        const result = await zxingReader.decodeFromImageElement(img);
+        return result && result.getText ? result.getText() : null;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) { /* not found */ }
   }
   return null;
 }
 
-// ---------- Submitting to Cogniss ---------------------------------------
-function submitScan(barcode, product) {
-  state.scans.push({
+// ---------- Open Food Facts --------------------------------------------------
+async function lookupAndShow(barcode) {
+  setStatus('Looking up product…', false);
+  try {
+    const fields = 'product_name,brands,nutriscore_grade,nova_group,nutriments,categories_tags';
+    const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json.status !== 1 || !json.product) {
+      setStatus('Product not found. Try a different item or enter the number.', true);
+      return;
+    }
+    renderResult(barcode, json.product);
+    recordScanResponse(barcode, json.product);
+    clearStatus();
+    showScreen('screen-result');
+  } catch (err) {
+    setStatus('Could not reach the product database. Check your connection.', true);
+  }
+}
+
+function renderResult(barcode, product) {
+  const name = product.product_name || ('#' + barcode);
+  const brand = (product.brands || '').split(',')[0].trim();
+  const grade = (product.nutriscore_grade || '').toLowerCase();
+  const n = product.nutriments || {};
+
+  document.getElementById('productBrand').textContent = brand || 'Brand';
+  document.getElementById('productName').textContent = name;
+
+  const nutriRow = document.getElementById('nutriRow');
+  if (grade && /[a-e]/.test(grade)) {
+    nutriRow.innerHTML = `<span class="nutri-badge ${grade}">${grade.toUpperCase()}</span><span class="nutri-label">Nutri-Score</span>`;
+  } else {
+    nutriRow.innerHTML = `<span class="nutri-badge unknown">?</span><span class="nutri-label">No score available</span>`;
+  }
+
+  const strip = document.getElementById('nutritionStrip');
+  const values = [
+    { v: formatVal(n['energy-kcal_100g'], 'kcal'), l: 'Energy' },
+    { v: formatVal(n['sugars_100g'], 'g'), l: 'Sugar' },
+    { v: formatVal(n['fat_100g'], 'g'), l: 'Fat' },
+    { v: formatVal(n['salt_100g'], 'g'), l: 'Salt' },
+  ];
+  strip.innerHTML = values.map(x => `<div><div class="v">${x.v}</div><div class="l">${x.l}</div></div>`).join('');
+
+  const swap = pickSwap(product.categories_tags || [], grade);
+  document.getElementById('swapBody').textContent = swap;
+}
+
+function formatVal(n, unit) {
+  if (n === undefined || n === null || isNaN(n)) return '—';
+  const v = Number(n);
+  return (v >= 100 ? Math.round(v) : v.toFixed(1)) + (unit ? ' ' + unit : '');
+}
+
+function pickSwap(categoryTags, grade) {
+  const swaps = (bridge.CONFIG && bridge.CONFIG.swaps) || {};
+  for (const tag of categoryTags) {
+    const key = tag.replace(/^[a-z]{2}:/, '');
+    if (typeof swaps[key] === 'string') return swaps[key];
+  }
+  if ((grade === 'd' || grade === 'e') && typeof swaps.__generic_unhealthy === 'string') {
+    return swaps.__generic_unhealthy;
+  }
+  return 'Whole, unprocessed foods are usually a better choice — fresh vegetables, fruit, legumes, or grains.';
+}
+
+// ---------- QUESTION_RESPONSE per scan --------------------------------------
+// One response per scan. The `text` field carries a human-readable summary
+// followed by a full JSON payload on the next line, so an analyst can read
+// it directly in Insights and downstream systems can parse the JSON.
+function recordScanResponse(barcode, product) {
+  const questions = bridge.QUESTIONS || [];
+  if (!questions.length) return;
+
+  // Submit against the next available question; if we exceed the topic's
+  // question count, keep submitting against the last one.
+  const idx = Math.min(scansLogged, questions.length - 1);
+
+  const n = product.nutriments || {};
+  const nutrition = {
+    energy_kcal_100g: n['energy-kcal_100g'] ?? null,
+    sugars_100g: n['sugars_100g'] ?? null,
+    saturated_fat_100g: n['saturated-fat_100g'] ?? null,
+    fat_100g: n['fat_100g'] ?? null,
+    salt_100g: n['salt_100g'] ?? null,
+    fibre_100g: n['fiber_100g'] ?? null,
+    proteins_100g: n['proteins_100g'] ?? null,
+  };
+
+  const elapsedMs = Date.now() - scanStartTime;
+
+  // Full structured record — everything the analyst might want.
+  const record = {
     barcode,
-    name: product.product_name || 'Unknown',
-    grade: product.nutriscore_grade,
-    nova: product.nova_group,
-  });
-  updateScanCount();
-  if (!bridge.questions[0]) return;
+    product_name: product.product_name || null,
+    brand: (product.brands || '').split(',')[0].trim() || null,
+    nutriscore_grade: (product.nutriscore_grade || '').toUpperCase() || null,
+    nova_group: product.nova_group ?? null,
+    nutrition_per_100g: nutrition,
+    response_time_ms: elapsedMs,
+    scanned_at: new Date().toISOString(),
+  };
+
+  // Human-readable first line, then a JSON payload on the next.
+  const humanLine = `${record.product_name || 'Unknown'} — ${barcode} — Nutri-Score ${record.nutriscore_grade || '?'} — ${Math.round(elapsedMs/1000)}s`;
+  const responseText = humanLine + '\n' + JSON.stringify(record);
+
   postToApp('QUESTION_RESPONSE', {
-    index: 0,
-    text: `${barcode} :: ${product.product_name || 'Unknown'}`,
-    duration: 0,
+    index: idx,
+    text: responseText,
+    // Cogniss `duration` is milliseconds — send raw elapsedMs.
+    duration: elapsedMs,
+    date: new Date().toISOString(),
   });
+
+  scansLogged++;
+  scanStartTime = Date.now();
 }
 
-function finishSession() {
-  stopCamera();
-  postToApp('QUIT', { completeState: 'COMPLETE', customScore: state.scans.length });
-  show('screenWelcome');
+// ---------- Completion -------------------------------------------------------
+function completeActivity() {
+  if (didQuit) return;
+  didQuit = true;
+  document.getElementById('scansCounter').textContent =
+    `You scanned ${scansLogged} product${scansLogged === 1 ? '' : 's'}.`;
+  showScreen('screen-done');
+  setTimeout(() => {
+    postToApp('QUIT', { completeState: 'COMPLETE', customScore: scansLogged });
+  }, 1200);
 }
 
-// ---------- UI wiring ---------------------------------------------------
-document.getElementById('btnStartCam').onclick = startCamera;
-document.getElementById('btnManual').onclick = () => {
-  const m = document.getElementById('manualEntry');
-  m.style.display = m.style.display === 'none' ? 'flex' : 'none';
-  if (m.style.display === 'flex') document.getElementById('manualInput').focus();
-};
-document.getElementById('btnLookup').onclick = () => {
-  const v = document.getElementById('manualInput').value.trim();
-  if (v) lookupProduct(v);
-};
-document.getElementById('manualInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btnLookup').click();
-});
-document.getElementById('btnScanAnother').onclick = () => show('screenScan');
-document.getElementById('btnErrBack').onclick = () => show('screenScan');
-document.getElementById('btnFinish').onclick = finishSession;
+// ---------- UI helpers -------------------------------------------------------
+function setStatus(msg, isError) {
+  const host = document.getElementById('scanStatus');
+  host.className = 'status' + (isError ? ' error' : '');
+  host.innerHTML = isError
+    ? escapeHtml(msg)
+    : `<span class="spinner"></span><span>${escapeHtml(msg)}</span>`;
+  host.style.display = 'flex';
+}
+function clearStatus() {
+  const host = document.getElementById('scanStatus');
+  host.style.display = 'none';
+  host.innerHTML = '';
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
 </script>
+
 </body>
 </html>
