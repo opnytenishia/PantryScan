@@ -186,7 +186,7 @@
 
 <div class="app">
 
-  <!-- ============ SCAN / CAPTURE ============ -->
+  <!-- ============ DASHBOARD (default state) ============ -->
   <section id="screen-scan" class="screen active">
     <div class="top-bar">
       <span></span>
@@ -194,9 +194,35 @@
     </div>
 
     <div class="scan-hero">
-      <div class="eyebrow">Scan a barcode</div>
+      <div class="eyebrow">Food scanner</div>
       <h1>Find healthier food.</h1>
-      <p class="subhead">Point the camera at any product barcode. We'll show the nutrition and suggest a better swap.</p>
+      <p class="subhead">Scan a product barcode and we'll show the nutrition and suggest a better swap.</p>
+    </div>
+
+    <div class="scan-controls">
+      <button class="primary-btn" id="scanItemBtn" type="button">Scan an item</button>
+
+      <div class="divider"><span>or enter manually</span></div>
+
+      <form class="manual-form" id="manualForm">
+        <input type="text" id="barcodeInput" inputmode="numeric" pattern="[0-9]*" placeholder="Enter barcode (e.g. 3017620422003)" maxlength="14">
+        <button class="secondary-btn" type="submit">Look up</button>
+      </form>
+    </div>
+
+    <div id="scanStatus" class="status"></div>
+  </section>
+
+  <!-- ============ CAMERA (active scanning) ============ -->
+  <section id="screen-camera" class="screen">
+    <div class="top-bar">
+      <button class="link-btn" id="cameraCancelBtn">← cancel</button>
+      <span></span>
+    </div>
+
+    <div class="scan-hero">
+      <div class="eyebrow">Scanning</div>
+      <h2>Point at a barcode</h2>
     </div>
 
     <div id="liveScanner" class="live-scanner" style="display:none">
@@ -213,21 +239,12 @@
       <div class="scan-status" id="liveScanStatus"><span class="spinner-white"></span>Looking for a barcode…</div>
     </div>
 
-    <div class="scan-controls">
-      <div class="file-input-wrap">
-        <button class="secondary-btn" id="capturePhotoBtn" type="button">Take a photo instead</button>
-        <input type="file" id="captureInput" accept="image/*" capture="environment">
-      </div>
-
-      <div class="divider"><span>or</span></div>
-
-      <form class="manual-form" id="manualForm">
-        <input type="text" id="barcodeInput" inputmode="numeric" pattern="[0-9]*" placeholder="Enter barcode (e.g. 3017620422003)" maxlength="14">
-        <button class="secondary-btn" type="submit">Look up</button>
-      </form>
+    <div id="cameraUnavailable" class="status" style="display:none;flex-direction:column;align-items:flex-start;gap:8px">
+      <strong>Camera unavailable on this device.</strong>
+      <span>Please go back and enter the barcode manually.</span>
     </div>
 
-    <div id="scanStatus" class="status"></div>
+    <div id="diagStrip" style="font-family:ui-monospace,monospace;font-size:10px;color:#8a6a1a;background:#fffbe6;border:1px solid #f5e7c4;padding:6px 10px;margin-top:12px;border-radius:6px;word-break:break-all;line-height:1.4">diag: waiting…</div>
   </section>
 
   <!-- ============ RESULT ============ -->
@@ -313,23 +330,25 @@ window.addEventListener('load', function() {
 
 // ---------- State ------------------------------------------------------------
 let scansLogged = 0;
-let photoZxingReader = null;
 let scanStartTime = Date.now();
 
 // ---------- Init -------------------------------------------------------------
 function initialise() {
   scanStartTime = Date.now();
-  startLiveScanning();
+  // No camera on load — dashboard is idle until the user taps "Scan an item"
 }
 
 // ---------- Screen routing ---------------------------------------------------
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
-  if (id === 'screen-scan') {
+  if (id === 'screen-camera') {
     scanStartTime = Date.now();
     startLiveScanning();
   } else {
     stopLiveScanning();
+  }
+  if (id === 'screen-scan') {
+    scanStartTime = Date.now();
   }
 }
 
@@ -341,16 +360,35 @@ const live = {
   running: false,
 };
 
+// ---------- Diagnostic strip (temporary, remove once iOS is confirmed) ------
+const diag = { stage: 'idle', detector: 'none', video: '0x0', frames: 0, err: null };
+function updateDiag() {
+  const el = document.getElementById('diagStrip');
+  if (!el) return;
+  el.textContent =
+    'stage:' + diag.stage +
+    ' | detector:' + diag.detector +
+    ' | zxing_loaded:' + (typeof window.ZXingBrowser !== 'undefined') +
+    ' | video:' + diag.video +
+    ' | frames:' + diag.frames +
+    (diag.err ? ' | err:' + diag.err : '');
+}
+
 async function startLiveScanning() {
   const container = document.getElementById('liveScanner');
+  const unavailable = document.getElementById('cameraUnavailable');
   const video = document.getElementById('liveVideo');
   const statusEl = document.getElementById('liveScanStatus');
 
   stopLiveScanning();
-  clearStatus();
+  unavailable.style.display = 'none';
+  diag.stage = 'starting'; diag.frames = 0; diag.err = null; diag.detector = 'none'; diag.video = '0x0';
+  updateDiag();
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    diag.stage = 'no-getUserMedia'; updateDiag();
     container.style.display = 'none';
+    unavailable.style.display = 'flex';
     return;
   }
 
@@ -358,6 +396,7 @@ async function startLiveScanning() {
   statusEl.innerHTML = '<span class="spinner-white"></span>Starting camera…';
 
   try {
+    diag.stage = 'requesting-camera'; updateDiag();
     live.stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
@@ -366,15 +405,27 @@ async function startLiveScanning() {
       },
       audio: false,
     });
+    diag.stage = 'stream-acquired'; updateDiag();
     video.srcObject = live.stream;
-    // Explicit play() — needed on iOS WKWebView even with muted+playsinline
-    try { await video.play(); } catch (e) {}
+
+    // iOS WKWebView occasionally won't autoplay even with muted+playsinline.
+    // Explicit play() is a no-op on Android but required on iOS to actually
+    // begin delivering frames.
+    try {
+      await video.play();
+      diag.stage = 'video-playing'; updateDiag();
+    } catch (e) {
+      diag.err = 'play:' + (e && e.message);
+      diag.stage = 'video-play-failed'; updateDiag();
+    }
+
     statusEl.innerHTML = '<span class="spinner-white"></span>Looking for a barcode…';
     live.running = true;
     detectLoop();
   } catch (err) {
+    diag.stage = 'gum-failed'; diag.err = (err && (err.name + ':' + err.message)) || 'unknown'; updateDiag();
     container.style.display = 'none';
-    setStatus('Camera unavailable — take a photo or enter the barcode manually.', false);
+    unavailable.style.display = 'flex';
   }
 }
 
@@ -392,11 +443,9 @@ function stopLiveScanning() {
   if (container) container.style.display = 'none';
 }
 
-// Frame-by-frame detection.
-// - Android Chromium: uses native BarcodeDetector (fast, no library).
-// - iOS Safari WebView & other browsers: ZXing polling on a canvas snapshot.
-// Poll rate is throttled to ~10 fps because ZXing decode is slow on iOS and
-// pumping every rAF backs up the JS thread with no user-visible benefit.
+// Detect loop. Two paths:
+// - Native BarcodeDetector (fast, Android Chromium only)
+// - ZXing canvas polling (iOS Safari WebView + everywhere else)
 async function detectLoop() {
   const video = document.getElementById('liveVideo');
 
@@ -408,58 +457,86 @@ async function detectLoop() {
       const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
         .filter(f => supported.includes(f));
       if (formats.length > 0) nativeDetector = new window.BarcodeDetector({ formats });
-    } catch (e) { /* fall through */ }
+    } catch (e) { diag.err = 'bd:' + (e && e.message); }
   }
 
-  // ZXing fallback with constrained formats + TRY_HARDER hint for better
-  // detection on the lower-quality frames iOS WebView tends to produce.
+  // ZXing fallback. Construct with no arguments (some versions treat a
+  // constructor arg as `timeBetweenScansMillis`, not hints — passing hints
+  // there would silently mis-configure the reader). Set hints via setHints()
+  // after construction if that API is available on this library version.
   let zxingReader = null;
   let canvas = null, ctx = null;
   if (!nativeDetector && window.ZXingBrowser) {
     try {
-      const hints = new Map();
-      if (window.ZXingBrowser.DecodeHintType) {
-        hints.set(window.ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, [
-          window.ZXingBrowser.BarcodeFormat.EAN_13,
-          window.ZXingBrowser.BarcodeFormat.EAN_8,
-          window.ZXingBrowser.BarcodeFormat.UPC_A,
-          window.ZXingBrowser.BarcodeFormat.UPC_E,
-          window.ZXingBrowser.BarcodeFormat.CODE_128,
-          window.ZXingBrowser.BarcodeFormat.CODE_39,
-        ]);
-        hints.set(window.ZXingBrowser.DecodeHintType.TRY_HARDER, true);
+      zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+      if (typeof zxingReader.setHints === 'function' && window.ZXingBrowser.DecodeHintType) {
+        try {
+          const hints = new Map();
+          hints.set(window.ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, [
+            window.ZXingBrowser.BarcodeFormat.EAN_13,
+            window.ZXingBrowser.BarcodeFormat.EAN_8,
+            window.ZXingBrowser.BarcodeFormat.UPC_A,
+            window.ZXingBrowser.BarcodeFormat.UPC_E,
+            window.ZXingBrowser.BarcodeFormat.CODE_128,
+            window.ZXingBrowser.BarcodeFormat.CODE_39,
+          ]);
+          hints.set(window.ZXingBrowser.DecodeHintType.TRY_HARDER, true);
+          zxingReader.setHints(hints);
+        } catch (e) { /* setHints failed; reader still usable with defaults */ }
       }
-      zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader(hints);
       canvas = document.createElement('canvas');
       ctx = canvas.getContext('2d', { willReadFrequently: true });
-    } catch (e) { /* fall through */ }
+    } catch (e) { diag.err = 'zx:' + (e && e.message); }
   }
 
   if (!nativeDetector && !zxingReader) {
+    diag.stage = 'no-decoder'; updateDiag();
     stopLiveScanning();
-    setStatus('Live scanning unavailable — take a photo or enter the barcode manually.', false);
+    document.getElementById('liveScanner').style.display = 'none';
+    document.getElementById('cameraUnavailable').style.display = 'flex';
     return;
   }
 
-  const POLL_INTERVAL_MS = nativeDetector ? 100 : 150;  // ~10fps native, ~7fps ZXing
+  diag.detector = nativeDetector ? 'native' : 'zxing';
+  diag.stage = 'polling';
+  updateDiag();
+
+  const POLL_INTERVAL_MS = nativeDetector ? 100 : 150;
 
   const tick = async () => {
     if (!live.running) return;
     if (video.readyState >= 2 && video.videoWidth > 0) {
+      diag.video = video.videoWidth + 'x' + video.videoHeight;
+      diag.frames++;
+      if (diag.frames % 10 === 0) updateDiag();
       try {
         if (nativeDetector) {
           const codes = await nativeDetector.detect(video);
-          if (codes && codes.length > 0) return onDetected(codes[0].rawValue);
+          if (codes && codes.length > 0) {
+            diag.stage = 'found'; updateDiag();
+            return onDetected(codes[0].rawValue);
+          }
         } else {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           try {
             const result = await zxingReader.decodeFromCanvas(canvas);
-            if (result && result.getText) return onDetected(result.getText());
-          } catch (e) { /* per-frame not-found is normal */ }
+            if (result && result.getText) {
+              diag.stage = 'found'; updateDiag();
+              return onDetected(result.getText());
+            }
+          } catch (e) {
+            // NotFoundException is expected for frames without a barcode.
+            // Anything else is worth logging to the diag strip.
+            if (e && e.name && e.name !== 'NotFoundException' && e.name !== 'NotFoundException2') {
+              diag.err = 'dec:' + e.name;
+            }
+          }
         }
-      } catch (e) { /* transient — keep polling */ }
+      } catch (e) {
+        diag.err = 'tick:' + (e && e.message);
+      }
     }
     if (live.running) live.timerId = setTimeout(tick, POLL_INTERVAL_MS);
   };
@@ -477,63 +554,15 @@ function onDetected(barcode) {
   }, 250);
 }
 
-// ---------- Photo capture fallback ------------------------------------------
-document.getElementById('capturePhotoBtn').addEventListener('click', () => {
-  document.getElementById('captureInput').click();
+// ---------- Camera screen navigation ----------------------------------------
+document.getElementById('scanItemBtn').addEventListener('click', () => {
+  clearStatus();
+  showScreen('screen-camera');
 });
 
-document.getElementById('captureInput').addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  stopLiveScanning();
-  setStatus('Reading the barcode…', false);
-  try {
-    const barcode = await decodeBarcodeFromFile(file);
-    if (!barcode) {
-      setStatus('Could not read a barcode from that photo. Try again or enter the number.', true);
-      startLiveScanning();
-      return;
-    }
-    await lookupAndShow(barcode);
-  } catch (err) {
-    setStatus('Could not read a barcode from that photo. Try again or enter the number.', true);
-    startLiveScanning();
-  } finally {
-    e.target.value = '';
-  }
+document.getElementById('cameraCancelBtn').addEventListener('click', () => {
+  showScreen('screen-scan');
 });
-
-async function decodeBarcodeFromFile(file) {
-  if ('BarcodeDetector' in window) {
-    try {
-      const detector = new window.BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
-      });
-      const bitmap = await createImageBitmap(file);
-      const results = await detector.detect(bitmap);
-      if (results && results.length > 0) return results[0].rawValue;
-    } catch (e) { /* fall through */ }
-  }
-  if (window.ZXingBrowser) {
-    try {
-      if (!photoZxingReader) photoZxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
-      const url = URL.createObjectURL(file);
-      const img = await new Promise((resolve, reject) => {
-        const i = new Image();
-        i.onload = () => resolve(i);
-        i.onerror = reject;
-        i.src = url;
-      });
-      try {
-        const result = await photoZxingReader.decodeFromImageElement(img);
-        return result && result.getText ? result.getText() : null;
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    } catch (e) { /* not found */ }
-  }
-  return null;
-}
 
 // ---------- Manual entry ----------------------------------------------------
 document.getElementById('manualForm').addEventListener('submit', async (e) => {
@@ -571,8 +600,8 @@ async function lookupAndShow(barcode) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     if (json.status !== 1 || !json.product) {
+      showScreen('screen-scan');
       setStatus('Product not found. Try a different item or enter the number.', true);
-      startLiveScanning();
       return;
     }
     renderResult(barcode, json.product);
@@ -580,8 +609,8 @@ async function lookupAndShow(barcode) {
     clearStatus();
     showScreen('screen-result');
   } catch (err) {
+    showScreen('screen-scan');
     setStatus('Could not reach the product database. Check your connection.', true);
-    startLiveScanning();
   }
 }
 
