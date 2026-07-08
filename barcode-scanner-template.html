@@ -60,17 +60,6 @@
     font-weight: 500; margin-bottom: 10px;
   }
 
-  .capture-card {
-    background: var(--paper); border: 1px solid var(--line); border-radius: 18px;
-    padding: 28px 22px; margin-top: 18px; box-shadow: var(--shadow);
-    display: flex; flex-direction: column; align-items: center; gap: 18px;
-  }
-  .icon-camera {
-    width: 64px; height: 64px; border-radius: 50%; background: var(--accent-soft);
-    display: flex; align-items: center; justify-content: center; color: var(--accent);
-  }
-  .icon-camera svg { width: 32px; height: 32px; }
-
   .primary-btn, .secondary-btn {
     font-family: inherit; font-size: 16px; font-weight: 500; padding: 14px 22px;
     border-radius: 12px; cursor: pointer; width: 100%; text-align: center;
@@ -165,6 +154,34 @@
     display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; color: white;
   }
   .scans-counter { font-size: 14px; color: var(--ink-soft); margin-top: 10px; }
+
+  /* ---------- Live camera preview ---------- */
+  .live-scanner {
+    position: relative; background: #1a1a1a; border-radius: 18px; overflow: hidden;
+    aspect-ratio: 4 / 3; margin-top: 18px; box-shadow: var(--shadow);
+  }
+  .live-scanner video {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .live-scanner .reticule {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .live-scanner .reticule svg { width: 74%; max-width: 320px; }
+  .live-scanner .scan-status {
+    position: absolute; left: 12px; right: 12px; bottom: 12px;
+    text-align: center; color: white; font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .live-scanner .scan-status .spinner-white {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.35); border-top-color: white;
+    border-radius: 50%; animation: spin 0.9s linear infinite; vertical-align: -2px; margin-right: 8px;
+  }
+  .scan-controls {
+    display: flex; flex-direction: column; gap: 10px; margin-top: 16px;
+  }
 </style>
 </head>
 <body>
@@ -181,18 +198,26 @@
     <div class="scan-hero">
       <div class="eyebrow">Scan a barcode</div>
       <h1>Find healthier food.</h1>
-      <p class="subhead">Take a photo of any product barcode. We'll show the nutrition and suggest a better swap.</p>
+      <p class="subhead">Point the camera at any product barcode. We'll show the nutrition and suggest a better swap.</p>
     </div>
 
-    <div class="capture-card">
-      <div class="icon-camera">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
+    <div id="liveScanner" class="live-scanner" style="display:none">
+      <video id="liveVideo" autoplay muted playsinline></video>
+      <div class="reticule">
+        <svg viewBox="0 0 320 160" fill="none">
+          <path d="M20 20 L20 50 M20 20 L50 20" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+          <path d="M300 20 L300 50 M300 20 L270 20" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+          <path d="M20 140 L20 110 M20 140 L50 140" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+          <path d="M300 140 L300 110 M300 140 L270 140" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+          <line x1="30" y1="80" x2="290" y2="80" stroke="#c5532f" stroke-width="1.5" opacity="0.8"/>
         </svg>
       </div>
+      <div class="scan-status" id="liveScanStatus"><span class="spinner-white"></span>Looking for a barcode…</div>
+    </div>
+
+    <div class="scan-controls">
       <div class="file-input-wrap">
-        <button class="primary-btn" id="captureBtnVisible" type="button">Take photo</button>
+        <button class="secondary-btn" id="capturePhotoBtn" type="button">Take a photo instead</button>
         <input type="file" id="captureInput" accept="image/*" capture="environment">
       </div>
 
@@ -286,6 +311,11 @@ window.addEventListener('message', onMessage);   // iOS RN + web
 
 window.addEventListener('load', function() {
   postToApp('READY_DYNAMIC_MEDIA');
+  // Standalone-testing fallback: if the host never responds within a few
+  // seconds, start the camera anyway so QA/dev can still exercise the UI.
+  setTimeout(() => {
+    if (!initialised) startLiveScanning();
+  }, 3000);
 });
 
 // ---------- State ------------------------------------------------------------
@@ -296,39 +326,181 @@ let scanStartTime = Date.now();
 // ---------- Init -------------------------------------------------------------
 function initialise() {
   scanStartTime = Date.now();
-  // Scan screen is already .active in the markup; no-op required, but if we
-  // ever add gating logic we'd do it here.
+  // Scan screen is the landing screen — start the camera now.
+  startLiveScanning();
 }
 
 // ---------- Screen routing ---------------------------------------------------
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
-  if (id === 'screen-scan') scanStartTime = Date.now();
+  if (id === 'screen-scan') {
+    scanStartTime = Date.now();
+    startLiveScanning();
+  } else {
+    stopLiveScanning();
+  }
 }
 
-// ---------- Capture handlers -------------------------------------------------
-document.getElementById('captureBtnVisible').addEventListener('click', () => {
+// ---------- Live camera scanning --------------------------------------------
+const live = {
+  stream: null,
+  rafId: null,
+  running: false,
+  zxingReader: null,
+};
+
+async function startLiveScanning() {
+  const container = document.getElementById('liveScanner');
+  const video = document.getElementById('liveVideo');
+  const statusEl = document.getElementById('liveScanStatus');
+
+  // Reset any prior state
+  stopLiveScanning();
+  clearStatus();
+
+  // Some environments (no getUserMedia at all) — skip live entirely
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  statusEl.innerHTML = '<span class="spinner-white"></span>Starting camera…';
+
+  try {
+    live.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    video.srcObject = live.stream;
+    try { await video.play(); } catch (e) { /* autoplay may need user gesture, but muted+playsinline usually allow it */ }
+    statusEl.innerHTML = '<span class="spinner-white"></span>Looking for a barcode…';
+    live.running = true;
+    detectLoop();
+  } catch (err) {
+    // Camera unavailable — hide the live view; the "Take a photo instead"
+    // button and manual entry are still on-screen so the user can proceed.
+    console.warn('Live camera unavailable:', err && err.message);
+    container.style.display = 'none';
+    setStatus('Camera unavailable — take a photo or enter the barcode manually.', false);
+  }
+}
+
+function stopLiveScanning() {
+  live.running = false;
+  if (live.rafId) { cancelAnimationFrame(live.rafId); live.rafId = null; }
+  if (live.stream) {
+    live.stream.getTracks().forEach(t => t.stop());
+    live.stream = null;
+  }
+  const video = document.getElementById('liveVideo');
+  if (video) video.srcObject = null;
+  const container = document.getElementById('liveScanner');
+  if (container) container.style.display = 'none';
+}
+
+// Frame-by-frame detection loop. Uses native BarcodeDetector when available;
+// falls back to ZXing decoding a canvas snapshot each frame.
+async function detectLoop() {
+  const video = document.getElementById('liveVideo');
+  const statusEl = document.getElementById('liveScanStatus');
+
+  // Prepare detector
+  let nativeDetector = null;
+  if ('BarcodeDetector' in window) {
+    try {
+      const supported = await window.BarcodeDetector.getSupportedFormats();
+      const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+        .filter(f => supported.includes(f));
+      if (formats.length > 0) nativeDetector = new window.BarcodeDetector({ formats });
+    } catch (e) { /* fall through to ZXing */ }
+  }
+
+  // ZXing setup (only used if native detector isn't available)
+  let zxingReader = null;
+  let canvas = null, ctx = null;
+  if (!nativeDetector && window.ZXingBrowser) {
+    zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+    canvas = document.createElement('canvas');
+    ctx = canvas.getContext('2d', { willReadFrequently: true });
+  }
+
+  // If neither is available, we can't do live scanning at all
+  if (!nativeDetector && !zxingReader) {
+    stopLiveScanning();
+    setStatus('Barcode scanner not supported on this device. Take a photo or enter the barcode manually.', false);
+    return;
+  }
+
+  const tick = async () => {
+    if (!live.running) return;
+    if (video.readyState >= 2 && video.videoWidth > 0) {
+      try {
+        if (nativeDetector) {
+          const codes = await nativeDetector.detect(video);
+          if (codes && codes.length > 0) {
+            onDetected(codes[0].rawValue);
+            return;
+          }
+        } else if (zxingReader) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          try {
+            const result = await zxingReader.decodeFromCanvas(canvas);
+            if (result && result.getText) {
+              onDetected(result.getText());
+              return;
+            }
+          } catch (e) { /* NotFoundException per frame is normal */ }
+        }
+      } catch (e) { /* transient — keep polling */ }
+    }
+    live.rafId = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function onDetected(barcode) {
+  if (!live.running) return;
+  live.running = false;
+  const statusEl = document.getElementById('liveScanStatus');
+  if (statusEl) statusEl.innerHTML = '<span class="spinner-white"></span>Got it — looking up…';
+  // Small pause so the user sees "Got it" before we transition
+  setTimeout(() => {
+    stopLiveScanning();
+    lookupAndShow(barcode);
+  }, 250);
+}
+
+// ---------- Photo capture fallback ------------------------------------------
+document.getElementById('capturePhotoBtn').addEventListener('click', () => {
   document.getElementById('captureInput').click();
 });
 
 document.getElementById('captureInput').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
+  stopLiveScanning();
   setStatus('Reading the barcode…', false);
   try {
     const barcode = await decodeBarcodeFromFile(file);
     if (!barcode) {
       setStatus('Could not read a barcode from that photo. Try again or enter the number.', true);
+      // Restart live scanning so the user isn't stuck
+      startLiveScanning();
       return;
     }
     await lookupAndShow(barcode);
   } catch (err) {
     setStatus('Could not read a barcode from that photo. Try again or enter the number.', true);
+    startLiveScanning();
   } finally {
-    e.target.value = ''; // allow re-pick of same file
+    e.target.value = '';
   }
 });
 
+// ---------- Manual entry ----------------------------------------------------
 document.getElementById('manualForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const raw = document.getElementById('barcodeInput').value.trim();
@@ -336,6 +508,7 @@ document.getElementById('manualForm').addEventListener('submit', async (e) => {
     setStatus('Please enter a valid barcode (8–14 digits).', true);
     return;
   }
+  stopLiveScanning();
   await lookupAndShow(raw);
 });
 
@@ -458,9 +631,9 @@ function pickSwap(categoryTags, grade) {
 }
 
 // ---------- QUESTION_RESPONSE per scan --------------------------------------
-// One response per scan. The `text` field carries a human-readable summary
-// followed by a full JSON payload on the next line, so an analyst can read
-// it directly in Insights and downstream systems can parse the JSON.
+// One response per scan. Sends a clean single-line summary as `text`, and
+// keeps the elapsed scan time in the `duration` field (Cogniss stores this
+// alongside the response — Insights shows it separately from the text).
 function recordScanResponse(barcode, product) {
   const questions = bridge.QUESTIONS || [];
   if (!questions.length) return;
@@ -469,40 +642,22 @@ function recordScanResponse(barcode, product) {
   // question count, keep submitting against the last one.
   const idx = Math.min(scansLogged, questions.length - 1);
 
-  const n = product.nutriments || {};
-  const nutrition = {
-    energy_kcal_100g: n['energy-kcal_100g'] ?? null,
-    sugars_100g: n['sugars_100g'] ?? null,
-    saturated_fat_100g: n['saturated-fat_100g'] ?? null,
-    fat_100g: n['fat_100g'] ?? null,
-    salt_100g: n['salt_100g'] ?? null,
-    fibre_100g: n['fiber_100g'] ?? null,
-    proteins_100g: n['proteins_100g'] ?? null,
-  };
+  const name = product.product_name || 'Unknown';
+  const brand = (product.brands || '').split(',')[0].trim();
+  const grade = (product.nutriscore_grade || '?').toUpperCase();
+
+  const parts = [name];
+  if (brand) parts.push(brand);
+  parts.push(barcode);
+  parts.push('Nutri-Score ' + grade);
+  const responseText = parts.join(' — ');
 
   const elapsedMs = Date.now() - scanStartTime;
-
-  // Full structured record — everything the analyst might want.
-  const record = {
-    barcode,
-    product_name: product.product_name || null,
-    brand: (product.brands || '').split(',')[0].trim() || null,
-    nutriscore_grade: (product.nutriscore_grade || '').toUpperCase() || null,
-    nova_group: product.nova_group ?? null,
-    nutrition_per_100g: nutrition,
-    response_time_ms: elapsedMs,
-    scanned_at: new Date().toISOString(),
-  };
-
-  // Human-readable first line, then a JSON payload on the next.
-  const humanLine = `${record.product_name || 'Unknown'} — ${barcode} — Nutri-Score ${record.nutriscore_grade || '?'} — ${Math.round(elapsedMs/1000)}s`;
-  const responseText = humanLine + '\n' + JSON.stringify(record);
 
   postToApp('QUESTION_RESPONSE', {
     index: idx,
     text: responseText,
-    // Cogniss `duration` is milliseconds — send raw elapsedMs.
-    duration: elapsedMs,
+    duration: elapsedMs, // Cogniss `duration` is milliseconds
     date: new Date().toISOString(),
   });
 
