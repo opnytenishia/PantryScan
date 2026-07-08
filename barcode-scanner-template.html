@@ -9,8 +9,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
-<!-- ZXing browser library — fallback decoder for iOS Safari WebView where BarcodeDetector is absent -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<!-- ZXing browser library — try multiple CDNs. Some WebViews block certain
+     hosts but not others. If this one fails on the test device, we'll
+     switch to inline embedding. -->
+<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
 
 <style>
   :root {
